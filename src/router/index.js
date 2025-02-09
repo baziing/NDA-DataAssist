@@ -121,6 +121,57 @@ export const constantRoutes = [
         meta: { title: 'Profile', icon: 'user', noCache: true }
       }
     ]
+  },
+  {
+    path: '/instructions', // 模块一的路径
+    component: Layout,
+    children: [
+      {
+        path: 'index',
+        component: () => import('@/views/Instructions/index'), // 模块一的组件
+        name: 'Instructions',
+        meta: { title: '使用说明', icon: 'documentation' } // 模块一的标题和图标
+      }
+    ]
+  },
+  {
+    path: '/autoReport', // 模块二的路径
+    component: Layout,
+    redirect: '/autoReport/manual', // 重定向到第一个子页签
+    name: 'AutoReport',
+    meta: { title: '自动报表', icon: 'table' }, // 模块二的标题和图标
+    children: [
+      {
+        path: 'manual',
+        component: () => import('@/views/AutoReport/manual'), // 子页签1的组件
+        name: 'Manual',
+        meta: { title: '手动生成' } // 子页签1的标题
+      },
+      {
+        path: 'timing',
+        component: () => import('@/views/AutoReport/timing'), // 子页签2的组件
+        name: 'Timing',
+        meta: { title: '定时配置' } // 子页签2的标题
+      },
+      {
+        path: 'email',
+        component: () => import('@/views/AutoReport/email'), // 子页签3的组件
+        name: 'Email',
+        meta: { title: '邮件配置' } // 子页签3的标题
+      }
+    ]
+  },
+  {
+    path: '/chatMonitoring', // 模块三的路径
+    component: Layout,
+    children: [
+      {
+        path: 'index',
+        component: () => import('@/views/ChatMonitoring/index'), // 模块三的组件
+        name: 'ChatMonitoring',
+        meta: { title: '聊天监控', icon: 'message' } // 模块三的标题和图标
+      }
+    ]
   }
 ]
 
