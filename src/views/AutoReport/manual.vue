@@ -53,10 +53,10 @@ export default {
   },
   methods: {
     handleFileUpload(file) {
-      this.file = file
+      // this.file = file; // 移除这行代码
       this.uploadProgress = 0 // 先重置为 0
       this.$forceUpdate() // 强制更新
-      this.uploadProgress = 100 // 假数据，仅为视觉效果
+      // this.uploadProgress = 100; // 假数据，仅为视觉效果
       this.uploadStatus = 'success'
       this.startButtonDisabled = false
       this.downloadButtonDisabled = true
@@ -70,6 +70,37 @@ export default {
         // this.startButtonDisabled = false; //这里不需要，因为导入文件后，开始执行按钮总是可用的
       }
       console.log('文件已选择:', file)
+
+      // 使用 fetch API 调用后端 /upload 接口
+      const formData = new FormData()
+      formData.append('file', file.raw) // 使用 file.raw
+      console.log(formData) // 检查 FormData 对象
+
+      fetch('http://localhost:5000/upload', { // 修改 URL
+        method: 'POST',
+        body: formData
+        // headers: { // 通常不需要手动设置 Content-Type
+        //   'Content-Type': 'multipart/form-data'
+        // }
+      })
+        .then(response => {
+          if (response.ok) {
+            this.uploadProgress = 100
+            this.uploadStatus = 'success'
+            return response.json()
+          } else {
+            throw new Error('文件上传失败')
+          }
+        })
+        .then(data => {
+          console.log(data.message)
+        // TODO: 处理上传成功的响应
+        })
+        .catch(error => {
+          console.error('Error:', error)
+          this.uploadStatus = 'exception' // or 'error'
+        // TODO: 处理上传失败的情况
+        })
     },
     handleStart() {
       console.log('开始执行')
