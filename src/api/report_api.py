@@ -55,7 +55,7 @@ def generate_report_route():
 
     # 创建一个uuid作为task_id
     task_id = str(uuid.uuid4())
-    task = ReportTask(filepath)
+    task = ReportTask(filepath, original_filename) # 传递 original_filename
     tasks[task_id] = task
     task.start()
     return jsonify({'message': 'Report generation started', 'task_id': task_id}), 200
@@ -66,7 +66,13 @@ def get_progress(task_id):
     if not task:
         return jsonify({'error': 'Task not found'}), 404
 
-    return jsonify(task.get_status()), 200
+    status = task.get_status()
+    if status['output_file']:
+        status['output_filename'] = os.path.basename(status['output_file']) # 提取文件名
+    # 在这里添加文件大小
+    if status['output_file_size']:
+      status['output_file_size'] = status['output_file_size']
+    return jsonify(status), 200
 
 @app.route('/download/<path:filename>', methods=['GET'])
 def download_file(filename):

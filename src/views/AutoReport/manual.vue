@@ -30,7 +30,7 @@
       </el-collapse-item>
       <el-collapse-item title="下载" name="4">
         <el-button type="primary" :disabled="downloadButtonDisabled" @click="handleDownload">导出文件</el-button>
-        <div>文件名：{{ outputFile }}</div>
+        <div>文件名：{{ outputFileName }}</div>
         <div>文件大小：{{ outputFileSize }}</div>
       </el-collapse-item>
     </el-collapse>
@@ -59,7 +59,8 @@ export default {
       submitTime: null, // 提交时间
       fileSize: null, // 文件大小
       outputFileSize: null, // 输出文件大小
-      executionLog: '' // 执行日志
+      executionLog: '', // 执行日志
+      outputFileName: null // 添加这一行
     }
   },
   methods: {
@@ -152,7 +153,8 @@ export default {
 
                 if (progressData.status === 'success') {
                   this.outputFile = progressData.output_file
-                  this.outputFileSize = '未知' // 后续需要后端提供
+                  this.outputFileName = progressData.output_filename
+                  this.outputFileSize = (progressData.output_file_size / 1024).toFixed(2) + ' KB' // 后续需要后端提供
                   this.downloadButtonDisabled = false
                   this.uploadButtonDisabled = true
                   this.isExecuting = false

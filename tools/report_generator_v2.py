@@ -345,11 +345,12 @@ def generate_report(input_file, task, output_file=None):
         #     # 文件名格式异常，按时间戳命名
         #     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         #     output_file = f"report_{timestamp}.xlsx"
-        base_name = os.path.basename(task.input_file)
-        file_name_without_ext = os.path.splitext(base_name)[0]  # 获取不带扩展名的文件名
+        
+        # 获取原始文件名（不带扩展名）
+        file_name_without_ext = os.path.splitext(task.original_filename)[0]
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         output_file = f"{file_name_without_ext}_{timestamp}.xlsx"
-    
+
         # 开始写入汇总表之前，更新进度
         task.update_progress({'progress':30, 'log':'开始写入汇总表'})
         # 完成数据写入,开始应用样式之前, 更新进度

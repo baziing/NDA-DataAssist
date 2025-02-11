@@ -25,14 +25,16 @@ logging.basicConfig(
 )
 
 class ReportTask:
-    def __init__(self, input_file):
+    def __init__(self, input_file, original_filename):
         self.input_file = input_file
+        self.original_filename = original_filename # 存储原始文件名
         self.output_file = None
         self.progress = 0
         self.status = 'pending'  # pending, running, success, failed
         self.thread = None
         self.error = None
         self.logs = []  # 新增日志列表
+        self.output_file_size = None # 新增文件大小属性
 
     def run(self):
         self.status = 'running'
@@ -42,6 +44,7 @@ class ReportTask:
             self.logs.append(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - 开始处理文件: {self.input_file}')
             self.output_file = generate_report(self.input_file,self)
             self.status = 'success'
+            self.output_file_size = os.path.getsize(self.output_file) # 获取文件大小
             logging.info(f'文件处理成功，输出文件: {self.output_file}')
             self.logs.append(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - 文件处理成功，输出文件: {self.output_file}')
         except Exception as e:
@@ -71,6 +74,7 @@ class ReportTask:
             'progress': self.progress,
             'status': self.status,
             'output_file': self.output_file,
+            'output_file_size': self.output_file_size, # 返回文件大小
             'error': self.error,
             'logs': self.logs  # 返回日志信息
         }
