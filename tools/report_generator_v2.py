@@ -48,6 +48,8 @@ def generate_report(input_file, task, output_file=None):
         # 处理每一行
         summary_row_offset = 1
         for index, row in df.iterrows():
+            if task.cancelled:  # 检查是否取消
+                raise Exception('Task cancelled')
             db_name = row['db_name']
             sql = row['output_sql']
             format_rules = row.get('format', '')
@@ -69,6 +71,8 @@ def generate_report(input_file, task, output_file=None):
             connection = connect_db_with_config(db_config)
             columns, data = execute_query(connection, sql)
             task.update_progress({'progress':20, 'log':'连接数据库并执行查询'}) # 连接数据库并执行查询后: 更新 20%
+            if task.cancelled:  # 检查是否取消
+                raise Exception('Task cancelled')
 
             # 转置处理
             if transpose:
@@ -94,6 +98,8 @@ def generate_report(input_file, task, output_file=None):
                 cell = temp_ws.cell(row=temp_row_offset, column=col_num, value=column)
                 cell.font = bold_font
                 cell.border = thin_border
+                if task.cancelled:  # 检查是否取消
+                    raise Exception('Task cancelled')
             
             # 写入数据
             for data_row in data:
@@ -102,10 +108,14 @@ def generate_report(input_file, task, output_file=None):
                     cell = temp_ws.cell(row=temp_row_offset, column=col_num, value=value)
                     cell.font = default_font
                     cell.border = thin_border
+                    if task.cancelled:  # 检查是否取消
+                        raise Exception('Task cancelled')
             
             # 应用自定义样式
             if format_rules:
                 apply_format_rules(temp_ws, format_rules)
+            if task.cancelled:  # 检查是否取消
+                raise Exception('Task cancelled')
             
             # 初始化位置字典
             if index == 0:

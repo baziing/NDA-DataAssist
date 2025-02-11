@@ -1,7 +1,9 @@
 <template>
   <div class="manual-report-container">
-    <h1>手动生成报表</h1>
-
+    <div class="header-container">
+      <h1>手动生成报表</h1>
+      <i class="el-icon-refresh reset-icon" title="重置任务" @click="handleResetTask" />
+    </div>
     <el-collapse v-model="activeNames" @change="handleCollapseChange">
       <el-collapse-item title="新建" name="1">
         <div class="progress-item">
@@ -34,11 +36,11 @@
         <div>文件大小：{{ outputFileSize }}</div>
       </el-collapse-item>
     </el-collapse>
-    <el-button type="danger" @click="handleResetTask">重置任务</el-button>
   </div>
 </template>
 
 <script>
+import { MessageBox } from 'element-ui'
 export default {
   name: 'Manual',
   data() {
@@ -214,31 +216,6 @@ export default {
       this.downloadProgress = 100
       this.downloadStatus = 'success'
     },
-    // 新增处理重置任务的方法
-    handleResetTask() {
-      if (this.isExecuting) {
-        // 调用后端 API 终止任务
-        fetch(`http://localhost:5000/reset/${this.taskId}`, {
-          method: 'POST'
-        })
-          .then(response => {
-            if (response.ok) {
-              this.$message({
-                message: '任务已重置',
-                type: 'success'
-              })
-            } else {
-              this.$message.error('重置任务失败')
-            }
-          })
-          .catch(error => {
-            console.error('Error:', error)
-            this.$message.error('重置任务失败')
-          })
-      }
-      // 重置前端状态
-      this.handleReset()
-    },
     handleReset() {
       this.uploadProgress = 0
       this.executionProgress = 0
@@ -260,6 +237,41 @@ export default {
       this.executionLog = ''
       this.activeNames = ['1'] // 重置折叠面板
     },
+    // 添加确认对话框
+    async handleResetTask() {
+      try {
+        await MessageBox.confirm('确定要重置任务吗？', '提示', {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning'
+        })
+        if (this.isExecuting) {
+        // 调用后端 API 终止任务
+          fetch(`http://localhost:5000/reset/${this.taskId}`, {
+            method: 'POST'
+          })
+            .then(response => {
+              if (response.ok) {
+                this.$message({
+                  message: '任务已重置',
+                  type: 'success'
+                })
+              } else {
+                this.$message.error('重置任务失败')
+              }
+            })
+            .catch(error => {
+              console.error('Error:', error)
+              this.$message.error('重置任务失败')
+            })
+          clearInterval(this.intervalId) // 清除定时器
+        }
+        // 重置前端状态
+        this.handleReset()
+      } catch (error) {
+        // 取消重置
+      }
+    },
     handleCollapseChange(activeNames) {
       console.log(activeNames)
     }
@@ -270,6 +282,7 @@ export default {
 <style scoped>
 .manual-report-container {
   padding: 20px;
+  position: relative;
 }
 
 .progress-group {
@@ -300,5 +313,18 @@ export default {
   max-height: 200px;
   overflow-y: auto;
   background-color: #f8f8f8;
+}
+.header-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+.reset-icon {
+    font-size: 20px;
+    cursor: pointer;
+    color: #f56c6c;
+    margin-left: auto;
+    margin-top: 55px; /* 向下偏移 */
 }
 </style>
