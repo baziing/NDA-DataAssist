@@ -80,7 +80,6 @@ export default {
 
       const formData = new FormData()
       formData.append('file', file.raw)
-      console.log(formData)
 
       fetch('http://localhost:5000/upload', {
         method: 'POST',
@@ -98,9 +97,9 @@ export default {
           this.uploadStatus = 'success'
           console.log(data.message)
           this.uploadedFilename = data.filename
-          this.submitTime = new Date().toLocaleString() // 获取当前时间
-          this.fileSize = (file.raw.size / 1024).toFixed(2) + ' KB' // 文件大小，转换为 KB
-          this.activeNames = ['1', '2'] // 展开“基本信息”面板
+          this.submitTime = new Date().toLocaleString()
+          this.fileSize = (file.raw.size / 1024).toFixed(2) + ' KB'
+          this.activeNames = ['1', '2', '3']
         })
         .catch(error => {
           console.error('Error:', error)
@@ -111,26 +110,8 @@ export default {
       console.log('开始执行')
       this.startButtonDisabled = true
       this.isExecuting = true
-      this.executionLog = '' // 清空日志
-      this.activeNames = ['1', '2', '3'] // 展开“执行”面板
-
-      // 模拟日志输出
+      this.executionLog = ''
       this.executionLog += '开始执行...\n'
-      setTimeout(() => {
-        this.executionLog += '正在连接数据库...\n'
-        this.executionProgress = 20
-        this.$forceUpdate()
-      }, 1000)
-      setTimeout(() => {
-        this.executionLog += '正在执行 SQL 查询...\n'
-        this.executionProgress = 50
-        this.$forceUpdate()
-      }, 2000)
-      setTimeout(() => {
-        this.executionLog += '正在生成报表...\n'
-        this.executionProgress = 80
-        this.$forceUpdate()
-      }, 3000)
 
       // 调用后端 /generate 接口
       fetch('http://localhost:5000/generate', {
@@ -149,16 +130,47 @@ export default {
         })
         .then(data => {
           console.log(data.message)
-          this.outputFile = data.output_file
-          // 获取输出文件大小（假设后端返回的文件名包含扩展名）
-          this.outputFileSize = '未知' // 暂时设置为未知，后续需要后端提供
-          this.executionProgress = 100
-          this.executionStatus = 'success'
-          this.downloadButtonDisabled = false
-          this.uploadButtonDisabled = true
-          this.isExecuting = false
-          this.executionLog += '报表生成成功！\n'
-          this.activeNames = ['1', '2', '3', '4'] // 展开“下载”面板
+          const taskId = data.task_id
+
+          // 使用 setInterval 定期获取进度
+          const intervalId = setInterval(() => {
+            fetch(`http://localhost:5000/progress/${taskId}`)
+              .then(response => {
+                if (response.ok) {
+                  return response.json()
+                } else {
+                  throw new Error('获取进度失败')
+                }
+              })
+              .then(progressData => {
+                this.executionProgress = progressData.progress
+                this.executionStatus = progressData.status
+                this.executionLog = progressData.logs.join('\n') // 将日志数组连接成字符串
+
+                if (progressData.status === 'success') {
+                  this.outputFile = progressData.output_file
+                  this.outputFileSize = '未知' // 后续需要后端提供
+                  this.downloadButtonDisabled = false
+                  this.uploadButtonDisabled = true
+                  this.isExecuting = false
+                  this.activeNames = ['1', '2', '3', '4'] // 展开“下载”面板
+                  clearInterval(intervalId) // 成功后清除 interval
+                } else if (progressData.status === 'failed') {
+                  this.executionStatus = 'exception'
+                  this.startButtonDisabled = false
+                  this.isExecuting = false
+                  clearInterval(intervalId) // 失败后清除 interval
+                }
+              })
+              .catch(error => {
+                console.error('Error:', error)
+                this.executionStatus = 'exception'
+                this.startButtonDisabled = false
+                this.isExecuting = false
+                this.executionLog += '获取进度失败！\n'
+                clearInterval(intervalId) // 出错时清除 interval
+              })
+          }, 1000) // 每秒获取一次进度
         })
         .catch(error => {
           console.error('Error:', error)
@@ -173,12 +185,25 @@ export default {
         alert('请先生成报表')
         return
       }
+
+      if (!this.outputFile) {
+        alert('请先生成报表')
+        return
+      }
+
+      // 构造下载链接
       const downloadUrl = `http://localhost:5000/download/${this.outputFile}`
+
+      // 创建一个隐藏的 <a> 元素
       const link = document.createElement('a')
       link.href = downloadUrl
       link.style.display = 'none'
       document.body.appendChild(link)
+
+      // 模拟点击，触发下载
       link.click()
+
+      // 移除 <a> 元素
       document.body.removeChild(link)
       this.downloadProgress = 100
       this.downloadStatus = 'success'

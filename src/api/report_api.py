@@ -1,9 +1,12 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS  # 导入 CORS
 import os
 import sys
 import uuid
-import os
+import threading
+import time
+import logging
+from datetime import datetime
 
 # 将tools目录添加到Python路径
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'tools')))
@@ -11,6 +14,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 # 导入report_generator.py中的函数和config模块
 from report_generator import process_single_file
 from config import OUTPUT_DIR, DB_CONFIG
+from report_task import ReportTask
 
 app = Flask(__name__)
 CORS(app)  # 启用 CORS
@@ -19,6 +23,9 @@ CORS(app)  # 启用 CORS
 UPLOAD_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'tmp', 'uploads'))
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# 存储任务的字典，key为uuid，value为ReportTask对象
+tasks = {}
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -32,20 +39,46 @@ def upload_file():
         filename = str(uuid.uuid4()) + '.xlsx'
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
-        
-        # 调用report_generator.py中的函数处理文件
-        try:
-            # 临时修改输出目录
-            original_output_dir = OUTPUT_DIR['report']
-            OUTPUT_DIR['report'] = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'output'))
-            process_single_file(filepath)
-            
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
-        finally:
-            # 恢复输出目录
-            OUTPUT_DIR['report'] = original_output_dir
-        return jsonify({'message': 'File uploaded and processed successfully'}), 200
+        return jsonify({'message': 'File uploaded successfully', 'filename': filename}), 200
+
+@app.route('/generate', methods=['POST'])
+def generate_report_route():
+    data = request.get_json()
+    filename = data.get('filename')
+    if not filename:
+        return jsonify({'error': 'No filename provided'}), 400
+
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    if not os.path.exists(filepath):
+        return jsonify({'error': 'File not found'}), 404
+
+    # 创建一个uuid作为task_id
+    task_id = str(uuid.uuid4())
+    task = ReportTask(filepath)
+    tasks[task_id] = task
+    task.start()
+    return jsonify({'message': 'Report generation started', 'task_id': task_id}), 200
+
+@app.route('/progress/<task_id>', methods=['GET'])
+def get_progress(task_id):
+    task = tasks.get(task_id)
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
+
+    return jsonify(task.get_status()), 200
+
+@app.route('/download/<path:filename>', methods=['GET'])
+def download_file(filename):
+    # 尝试直接使用传入的文件名（包含日期目录）
+    file_path = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')), filename)
+    if not os.path.exists(file_path):
+      return jsonify({'error': 'File not found'}), 404
+
+    # 使用send_file发送文件
+    try:
+        return send_file(file_path, as_attachment=True)
+    except Exception as e:
+        return jsonify({'error': f'下载失败: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -12,7 +12,7 @@ import logging
 from datetime import datetime
 from openpyxl.formatting.rule import DataBarRule, ColorScaleRule
 
-def generate_report(input_file, output_file=None):
+def generate_report(input_file, task, output_file=None):
     """
     生成报表
     """
@@ -23,16 +23,21 @@ def generate_report(input_file, output_file=None):
         output_subdir = os.path.join(OUTPUT_DIR['report'], date_str)
         ensure_dir_exists(output_subdir)
         
+        # 调试：打印 OUTPUT_DIR['report'] 和 output_subdir
+        print(f"OUTPUT_DIR['report']: {OUTPUT_DIR['report']}")
+        print(f"output_subdir: {output_subdir}")
+
         # 读取输入文件
         input_path = input_file
         df = pd.read_excel(input_path)
-        
+        task.update_progress({'progress':5, 'log':'读取输入文件'})  # 读取输入文件后：更新 5%
+
         # 创建输出工作簿
         wb = Workbook()
         summary_ws = wb.active
         summary_ws.title = '汇总报表'
-        
-        # 定义默认样式
+
+         # 定义默认样式
         default_font = Font(name='微软雅黑', size=12)
         bold_font = Font(name='微软雅黑', size=12, bold=True)
         thin_border = Border(left=Side(style=None), 
@@ -63,6 +68,7 @@ def generate_report(input_file, output_file=None):
             # 连接数据库并执行查询
             connection = connect_db_with_config(db_config)
             columns, data = execute_query(connection, sql)
+            task.update_progress({'progress':20, 'log':'连接数据库并执行查询'}) # 连接数据库并执行查询后: 更新 20%
 
             # 转置处理
             if transpose:
@@ -339,6 +345,15 @@ def generate_report(input_file, output_file=None):
             # 文件名格式异常，按时间戳命名
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             output_file = f"report_{timestamp}.xlsx"
+    
+        # 开始写入汇总表之前，更新进度
+        task.update_progress({'progress':30, 'log':'开始写入汇总表'})
+        # 完成数据写入,开始应用样式之前, 更新进度
+        task.update_progress({'progress':60, 'log':'完成数据写入,开始应用样式'})
+        # 完成样式和条件格式写入后, 更新进度
+        task.update_progress({'progress':80, 'log':'完成样式和条件格式写入'})
+        # 完成所有数据插入,新增标题和首列之前, 更新进度
+        task.update_progress({'progress':90, 'log':'完成所有数据插入,新增标题和首列'})
 
         # 删除所有临时表
         temp_sheets = [sheet for sheet in wb.sheetnames if sheet.startswith('临时表')]
@@ -347,9 +362,12 @@ def generate_report(input_file, output_file=None):
     
         # 保存文件
         output_path = os.path.join(output_subdir, output_file)
+        # 调试：打印 output_path
+        print(f"output_path: {output_path}")
         wb.save(output_path)
+        task.update_progress({'progress':100, 'log':'保存文件'}) # 保存文件后：更新 100%
         logging.info(f'报表生成成功: {output_path}')
-        
+
         # 获取邮件配置
         file_name = os.path.basename(input_file)
         report_type = os.path.basename(os.path.dirname(input_file))
@@ -379,7 +397,7 @@ def generate_report(input_file, output_file=None):
                     logging.error('邮件发送失败')
             except Exception as e:
                 logging.error(f'邮件发送失败: {e}')
-        
+        return output_path
     except Exception as e:
         logging.error(f'报表生成失败: {e}')
         raise
@@ -1139,113 +1157,3 @@ def apply_color_scale(worksheet, params):
     except Exception as e:
         logging.error(f'应用色阶失败: {e}')
         raise
-
-def process_single_file(input_file, output_file=None):
-    """处理单个文件"""
-    try:
-        generate_report(input_file, output_file)
-        return True
-    except Exception as e:
-        logging.error(f'处理文件 {input_file} 失败: {e}')
-        return False
-
-def process_batch(folder_name):
-    """批量处理文件夹下的所有文件"""
-    # 使用config中的INPUT_DIR配置
-    input_dir = os.path.join(INPUT_DIR['report'], folder_name)
-    input_dir = os.path.abspath(input_dir)
-    # 获取输入文件夹名称（仅用于日志记录）
-    folder_base = os.path.basename(folder_name)
-    
-    success_count = 0
-    error_count = 0
-    
-    # 遍历文件夹下的所有Excel文件
-    for filename in os.listdir(input_dir):
-        if filename.endswith('.xlsx'):
-            input_path = os.path.join(input_dir, filename)
-            try:
-                if process_single_file(input_path):
-                    success_count += 1
-                else:
-                    error_count += 1
-            except Exception as e:
-                logging.error(f'处理文件 {filename} 时发生错误: {e}')
-                error_count += 1
-    
-    logging.info(f'批量处理完成。成功: {success_count}, 失败: {error_count}')
-    return success_count > 0
-
-if __name__ == "__main__":
-    import argparse
-    import sys
-    
-    # 配置日志
-    log_dir = 'logs'
-    os.makedirs(log_dir, exist_ok=True)
-    
-    # 生成带时间戳的日志文件名
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    log_file = os.path.join(log_dir, f'autoreport_{timestamp}.log')
-    
-    # 配置日志
-    logging.basicConfig(
-        level=logging.INFO,  # 保留INFO级别日志
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stdout)
-        ]
-    )
-    # 设置数据库连接日志级别为WARNING
-    logging.getLogger('mysql.connector').setLevel(logging.WARNING)
-    
-    # 清理超过30天的旧日志
-    now = time.time()
-    for filename in os.listdir(log_dir):
-        file_path = os.path.join(log_dir, filename)
-        if os.path.isfile(file_path) and filename.startswith('autoreport_'):
-            file_age = now - os.path.getmtime(file_path)
-            if file_age > 30 * 86400:  # 30天
-                try:
-                    os.remove(file_path)
-                    logging.info(f'删除旧日志文件: {filename}')
-                except Exception as e:
-                    logging.error(f'删除日志文件失败: {filename}, 错误: {e}')
-
-    # 清理超过30天的旧output文件夹
-    output_dir = OUTPUT_DIR['report']
-    if os.path.exists(output_dir):
-        for folder_name in os.listdir(output_dir):
-            folder_path = os.path.join(output_dir, folder_name)
-            if os.path.isdir(folder_path):
-                folder_age = now - os.path.getmtime(folder_path)
-                if folder_age > 30 * 86400:  # 30天
-                    try:
-                        # 删除文件夹及其内容
-                        import shutil
-                        shutil.rmtree(folder_path)
-                        logging.info(f'删除旧output文件夹: {folder_name}')
-                    except Exception as e:
-                        logging.error(f'删除output文件夹失败: {folder_name}, 错误: {e}')
-    
-    # 解析命令行参数
-    parser = argparse.ArgumentParser(description='自动报表生成工具')
-    parser.add_argument('input', help='输入文件路径或文件夹名称')
-    parser.add_argument('-o', '--output', help='输出文件路径（可选，仅单文件模式）')
-    parser.add_argument('-b', '--batch', action='store_true', help='批量模式，处理指定文件夹下的所有文件')
-    
-    args = parser.parse_args()
-    
-    try:
-        if args.batch:
-            # 批量模式
-            if not process_batch(args.input):
-                sys.exit(1)
-        else:
-            # 单文件模式
-            if not process_single_file(args.input, args.output):
-                sys.exit(1)
-    except Exception as e:
-        logging.error(f'处理失败: {e}')
-        sys.exit(1)
