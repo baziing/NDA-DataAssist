@@ -94,11 +94,14 @@ export default {
         })
         .then(data => {
           this.uploadProgress = 100
+          this.uploadProgress = 100
           this.uploadStatus = 'success'
           console.log(data.message)
-          this.uploadedFilename = data.filename
+          this.uploadedFilename = data.original_filename
           this.submitTime = new Date().toLocaleString()
           this.fileSize = (file.raw.size / 1024).toFixed(2) + ' KB'
+          this.file = file // 将 file 对象赋值给 this.file
+          this.filename = data.filename // 保存上传后返回的filename
           this.activeNames = ['1', '2', '3']
         })
         .catch(error => {
@@ -119,7 +122,7 @@ export default {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ filename: this.uploadedFilename })
+        body: JSON.stringify({ filename: this.filename, original_filename: this.uploadedFilename })
       })
         .then(response => {
           if (response.ok) {

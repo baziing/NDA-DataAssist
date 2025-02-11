@@ -40,11 +40,10 @@ class ReportTask:
             # 模拟执行过程，实际情况需要根据process_single_file的实现来更新进度,这里设置几个关键节点来更新
             logging.info(f'开始处理文件: {self.input_file}')
             self.logs.append(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - 开始处理文件: {self.input_file}')
-            self.output_file = generate_report(self.input_file, self)
+            self.output_file = generate_report(self.input_file,self)
             self.status = 'success'
             logging.info(f'文件处理成功，输出文件: {self.output_file}')
             self.logs.append(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - 文件处理成功，输出文件: {self.output_file}')
-
         except Exception as e:
             self.status = 'failed'
             self.error = str(e)
@@ -62,7 +61,7 @@ class ReportTask:
               self.logs.append(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - {progress["log"]}')
         else:
           self.progress = progress
-        
+    
     def start(self):
         self.thread = threading.Thread(target=self.run)
         self.thread.start()

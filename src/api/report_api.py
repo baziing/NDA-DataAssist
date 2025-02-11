@@ -39,15 +39,16 @@ def upload_file():
         filename = str(uuid.uuid4()) + '.xlsx'
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
-        return jsonify({'message': 'File uploaded successfully', 'filename': filename}), 200
+        return jsonify({'message': 'File uploaded successfully', 'filename': filename, 'original_filename': file.filename }), 200
 
 @app.route('/generate', methods=['POST'])
 def generate_report_route():
     data = request.get_json()
-    filename = data.get('filename')
+    filename = data.get('filename') # 获取的是uuid生成的文件名
+    original_filename = data.get('original_filename')  # 获取原始文件名
     if not filename:
         return jsonify({'error': 'No filename provided'}), 400
-
+    # 使用original_filename
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     if not os.path.exists(filepath):
         return jsonify({'error': 'File not found'}), 404

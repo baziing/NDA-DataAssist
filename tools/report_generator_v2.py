@@ -326,25 +326,29 @@ def generate_report(input_file, task, output_file=None):
                 summary_ws.column_dimensions[chr(64 + col)].width = 13  # 其他列设置为13
 
         # 生成输出文件名
-        base_name = os.path.basename(input_file)
-        name_parts = base_name.split('_')
+        # base_name = os.path.basename(input_file)
+        # name_parts = base_name.split('_')
         
-        # 检查第一个部分的最后一个字符是否为D/W/Y
-        if len(name_parts) > 0 and len(name_parts[0]) > 0:
-            last_char = name_parts[0][-1].upper()
-            if last_char in ['D', 'W', 'Y']:
-                # 符合命名规则：gameidT_name_YYYYMMDD
-                date_str = datetime.now().strftime('%Y%m%d')
-                output_file = f"{name_parts[0]}_{'_'.join(name_parts[1:])}_{date_str}.xlsx"
-            else:
-                # 不符合规则，按时间戳命名
-                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                file_name_without_ext = os.path.splitext(base_name)[0]
-                output_file = f"{file_name_without_ext}_{timestamp}.xlsx"
-        else:
-            # 文件名格式异常，按时间戳命名
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            output_file = f"report_{timestamp}.xlsx"
+        # # 检查第一个部分的最后一个字符是否为D/W/Y
+        # if len(name_parts) > 0 and len(name_parts[0]) > 0:
+        #     last_char = name_parts[0][-1].upper()
+        #     if last_char in ['D', 'W', 'Y']:
+        #         # 符合命名规则：gameidT_name_YYYYMMDD
+        #         date_str = datetime.now().strftime('%Y%m%d')
+        #         output_file = f"{name_parts[0]}_{'_'.join(name_parts[1:])}_{date_str}.xlsx"
+        #     else:
+        #         # 不符合规则，按时间戳命名
+        #         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        #         file_name_without_ext = os.path.splitext(base_name)[0]
+        #         output_file = f"{file_name_without_ext}_{timestamp}.xlsx"
+        # else:
+        #     # 文件名格式异常，按时间戳命名
+        #     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        #     output_file = f"report_{timestamp}.xlsx"
+        base_name = os.path.basename(task.input_file)
+        file_name_without_ext = os.path.splitext(base_name)[0]  # 获取不带扩展名的文件名
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_file = f"{file_name_without_ext}_{timestamp}.xlsx"
     
         # 开始写入汇总表之前，更新进度
         task.update_progress({'progress':30, 'log':'开始写入汇总表'})
