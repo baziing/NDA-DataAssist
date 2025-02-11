@@ -87,5 +87,14 @@ def download_file(filename):
     except Exception as e:
         return jsonify({'error': f'下载失败: {str(e)}'}), 500
 
+@app.route('/reset/<task_id>', methods=['POST'])
+def reset_task(task_id):
+    task = tasks.get(task_id)
+    if task:
+        task.cancel()  # 取消任务（需要添加到 ReportTask 类）
+        return jsonify({'message': f'Task {task_id} reset successfully'}), 200
+    else:
+        return jsonify({'error': 'Task not found'}), 404
+
 if __name__ == '__main__':
     app.run(debug=True)

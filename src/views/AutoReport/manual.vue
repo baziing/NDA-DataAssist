@@ -34,6 +34,7 @@
         <div>文件大小：{{ outputFileSize }}</div>
       </el-collapse-item>
     </el-collapse>
+    <el-button type="danger" @click="handleResetTask">重置任务</el-button>
   </div>
 </template>
 
@@ -134,11 +135,11 @@ export default {
         })
         .then(data => {
           console.log(data.message)
-          const taskId = data.task_id
+          this.taskId = data.task_id // 保存 task_id
 
           // 使用 setInterval 定期获取进度
           const intervalId = setInterval(() => {
-            fetch(`http://localhost:5000/progress/${taskId}`)
+            fetch(`http://localhost:5000/progress/${this.taskId}`)
               .then(response => {
                 if (response.ok) {
                   return response.json()
@@ -213,6 +214,31 @@ export default {
       this.downloadProgress = 100
       this.downloadStatus = 'success'
     },
+    // 新增处理重置任务的方法
+    handleResetTask() {
+      if (this.isExecuting) {
+        // 调用后端 API 终止任务
+        fetch(`http://localhost:5000/reset/${this.taskId}`, {
+          method: 'POST'
+        })
+          .then(response => {
+            if (response.ok) {
+              this.$message({
+                message: '任务已重置',
+                type: 'success'
+              })
+            } else {
+              this.$message.error('重置任务失败')
+            }
+          })
+          .catch(error => {
+            console.error('Error:', error)
+            this.$message.error('重置任务失败')
+          })
+      }
+      // 重置前端状态
+      this.handleReset()
+    },
     handleReset() {
       this.uploadProgress = 0
       this.executionProgress = 0
@@ -223,6 +249,7 @@ export default {
       this.file = null
       this.uploadedFilename = null
       this.outputFile = null
+      this.outputFileName = null
       this.uploadButtonDisabled = false
       this.startButtonDisabled = true
       this.downloadButtonDisabled = true

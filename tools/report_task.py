@@ -35,10 +35,14 @@ class ReportTask:
         self.error = None
         self.logs = []  # 新增日志列表
         self.output_file_size = None # 新增文件大小属性
+        self.cancelled = False  # 新增取消标志
 
     def run(self):
         self.status = 'running'
         try:
+            # 模拟执行过程，实际情况需要根据process_single_file的实现来更新进度,这里设置几个关键节点来更新
+            logging.info(f'开始处理文件: {self.input_file}')
+            self.logs.append(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - 开始处理文件: {self.input_file}')
             # 模拟执行过程，实际情况需要根据process_single_file的实现来更新进度,这里设置几个关键节点来更新
             logging.info(f'开始处理文件: {self.input_file}')
             self.logs.append(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - 开始处理文件: {self.input_file}')
@@ -53,8 +57,9 @@ class ReportTask:
             logging.error(f'处理文件失败: {e}')
             self.logs.append(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - 处理文件失败: {e}')
         finally:
-            logging.info('任务完成')
-            self.logs.append(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - 任务完成')
+            if not self.cancelled:  # 如果任务没有被取消
+                logging.info('任务完成')
+                self.logs.append(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - 任务完成')
 
     def update_progress(self, progress):
         """更新进度"""
@@ -64,6 +69,10 @@ class ReportTask:
               self.logs.append(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - {progress["log"]}')
         else:
           self.progress = progress
+
+        # 检查是否取消
+        if self.cancelled:
+            raise Exception('任务已取消')
     
     def start(self):
         self.thread = threading.Thread(target=self.run)
@@ -74,10 +83,14 @@ class ReportTask:
             'progress': self.progress,
             'status': self.status,
             'output_file': self.output_file,
-            'output_file_size': self.output_file_size, # 返回文件大小
+            'output_file_size': self.output_file_size,
             'error': self.error,
             'logs': self.logs  # 返回日志信息
         }
+    
+    def cancel(self):
+        """取消任务"""
+        self.cancelled = True
 
 if __name__ == '__main__':
     # 示例用法
