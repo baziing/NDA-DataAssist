@@ -120,7 +120,7 @@ export default {
     handleFileUpload(file) {
       this.uploadProgress = 0
       this.$forceUpdate()
-      this.uploadStatus = 'success'
+      this.uploadStatus = null // 初始状态应为 null
       this.startButtonDisabled = true // 上传模板后禁用开始按钮
       this.downloadButtonDisabled = true
       this.executionProgress = 0
@@ -131,6 +131,13 @@ export default {
         this.uploadStatus = null
       }
       console.log('文件已选择:', file)
+
+      // 检查文件类型
+      if (!file.raw.name.endsWith('.xlsx')) {
+        this.uploadStatus = 'exception'
+        this.$message.error('请上传 .xlsx 格式的模板文件')
+        return // 提前返回，阻止后续操作
+      }
 
       const formData = new FormData()
       formData.append('file', file.raw)
@@ -143,7 +150,9 @@ export default {
           if (response.ok) {
             return response.json()
           } else {
-            throw new Error('文件上传失败')
+            return response.json().then(data => {
+              throw new Error(data.error || '模板文件上传失败')
+            })
           }
         })
         .then(data => {
@@ -161,6 +170,9 @@ export default {
         .catch(error => {
           console.error('Error:', error)
           this.uploadStatus = 'exception'
+          this.$message.error(error.message)
+          this.uploadProgress = 0 // 重置进度条
+          this.skipButtonDisabled = true // 禁用“SKIP”
         })
     },
     // 新增处理变量文件上传

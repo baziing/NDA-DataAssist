@@ -41,12 +41,25 @@ def upload_file():
     file = request.files['file']
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
-    if file:
+    if file and allowed_file(file.filename):
         # 生成唯一文件名
         filename = str(uuid.uuid4()) + '.xlsx'
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
+
+        # 检查模板文件格式
+        try:
+            df = pd.read_excel(filepath)
+            required_columns = ['db_name', 'output_sql']
+            if not all(col in df.columns for col in required_columns):
+                raise ValueError(f'Invalid template format. Expected columns: {required_columns}')
+        except Exception as e:
+            os.remove(filepath)  # 格式错误时删除上传的文件
+            return jsonify({'error': f'Error processing template file: {str(e)}'}), 400
+
         return jsonify({'message': 'File uploaded successfully', 'filename': filename, 'original_filename': file.filename }), 200
+    else:
+        return jsonify({'error': 'Invalid file type'}), 400
 
 @app.route('/generate', methods=['POST'])
 def generate_report_route():
@@ -123,6 +136,21 @@ def upload_vars():
         print("No selected file")
         return jsonify({'error': 'No selected file'}), 400
     if file and allowed_file(file.filename):
+        # 生成唯一文件名
+        filename = str(uuid.uuid4()) + '.xlsx'
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(filepath)
+
+        # 检查模板文件格式
+        try:
+            df = pd.read_excel(filepath)
+            required_columns = ['db_name', 'output_sql']
+            if not all(col in df.columns for col in required_columns):
+                raise ValueError(f'Invalid template format. Expected columns: {required_columns}')
+        except Exception as e:
+            os.remove(filepath)  # 格式错误时删除上传的文件
+            return jsonify({'error': f'Error processing template file: {str(e)}'}), 400
+
         # 生成唯一文件名
         filename = str(uuid.uuid4()) + '.xlsx'
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
