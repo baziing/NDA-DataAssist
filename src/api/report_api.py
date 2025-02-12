@@ -7,6 +7,7 @@ import threading
 import time
 import logging
 from datetime import datetime
+import pandas as pd
 
 from dotenv import load_dotenv
 from pathlib import Path  # 导入 Path
@@ -112,15 +113,21 @@ def allowed_file(filename):
 
 @app.route('/upload_vars', methods=['POST'])
 def upload_vars():
+    print("Request headers:", request.headers) # 打印请求头
     if 'file' not in request.files:
+        print("No file part in request.files")
         return jsonify({'error': 'No file part'}), 400
     file = request.files['file']
+    print("File received:", file.filename) # 打印文件名
     if file.filename == '':
+        print("No selected file")
         return jsonify({'error': 'No selected file'}), 400
     if file and allowed_file(file.filename):
-        filename = "variables.xlsx"
+        # 生成唯一文件名
+        filename = str(uuid.uuid4()) + '.xlsx'
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
+        print(f"File saved to: {filepath}") # 打印文件保存路径
         # 解析变量文件
         try:
             variables = []
@@ -128,6 +135,7 @@ def upload_vars():
             # 检查列名是否存在，并且转换为小写
             expected_columns = ['key', 'value']
             actual_columns = [col.lower() for col in df.columns]
+            print("Actual columns:", actual_columns) # 打印实际列名
             if not all(col in actual_columns for col in expected_columns):
                 raise ValueError(f'Invalid file format. Expected columns: {expected_columns}')
             # 提取 key 和 value 列
@@ -135,10 +143,13 @@ def upload_vars():
               key = row['key']
               value = row['value']
               variables.append({'key': str(key), 'value': str(value)})
-            return jsonify({'message': 'File uploaded and variables extracted successfully', 'variables': variables}), 200
+            return jsonify({'message': 'File uploaded and variables extracted successfully', 'variables': variables, 'filename': filename}), 200 #增加filename返回
         except Exception as e:
-            return jsonify({'error': str(e)}), 400
+            print(f"Error processing file: {e}") # 打印详细错误
+            return jsonify({'error': f'Error processing file: {str(e)}'}), 400  # 更详细的错误信息
     else:
         return jsonify({'error': 'Invalid file type'}), 400
+
+
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('VUE_APP_API_PORT')))

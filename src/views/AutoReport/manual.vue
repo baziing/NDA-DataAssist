@@ -31,13 +31,14 @@
               action="#"
               :show-file-list="false"
               :on-change="handleVarFileUpload"
+              :on-progress="handleVarUploadProgress"
               :auto-upload="false"
-              style="margin-left: 0px;"
+              style="margin-left: 5px;"
             >
               <el-button :style="{ width: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }" type="primary" :disabled="skipButtonDisabled">上传</el-button>
             </el-upload>
-            <el-progress :percentage="uploadVarProgress" :status="uploadVarStatus" class="progress-bar" style="margin-left: 10px;" />
           </div>
+          <el-progress :percentage="uploadVarProgress" :status="uploadVarStatus" class="progress-bar" style="margin-left: 10px;" />
         </div>
       </el-collapse-item>
       <el-collapse-item title="变量内容" name="6">
@@ -65,7 +66,7 @@
       </el-collapse-item>
       <el-collapse-item title="执行任务" name="3">
         <div class="progress-item">
-          <el-button type="primary" :disabled="startButtonDisabled" style="display: flex; align-items: center; justify-content: center;" @click="handleStart">开始执行</el-button>
+          <el-button type="primary" :disabled="startButtonDisabled" style="display: flex; align-items: center; justify-content: center;">开始执行</el-button>
           <el-progress :percentage="executionProgress" :status="executionStatus" class="progress-bar" />
         </div>
         <div class="log-container">
@@ -164,7 +165,6 @@ export default {
     handleVarFileUpload(file) {
       this.uploadVarProgress = 0
       this.$forceUpdate()
-      this.uploadVarStatus = 'success'
       this.startButtonDisabled = false // 上传变量后启用开始按钮
       this.activeNames = ['1', '2', '5', '6', '3'] // 展开“变量内容”和“执行任务”
       console.log('变量文件已选择:', file)
@@ -184,8 +184,8 @@ export default {
           }
         })
         .then(data => {
-          this.uploadVarProgress = 100
-          this.uploadVarStatus = 'success'
+        // this.uploadVarProgress = 100;
+        // this.uploadVarStatus = 'success';
           this.variables = data.variables // 假设后端返回的变量数据在 data.variables 中
           this.showVariables = true
           console.log('变量文件上传成功:', data)
@@ -195,8 +195,14 @@ export default {
           this.uploadVarStatus = 'exception'
         })
     },
+    handleVarUploadProgress(event, file, fileList) {
+      this.uploadVarProgress = Math.floor((event.loaded / event.total) * 100)
+      this.uploadVarStatus = this.uploadVarProgress === 100 ? 'success' : 'uploading'
+    },
     handleSkipVariables() {
       this.showVariables = true
+      this.uploadVarProgress = 0
+      this.uploadVarStatus = null
       this.startButtonDisabled = false // 点击“SKIP”后启用开始按钮
       this.activeNames = ['1', '2', '5', '6', '3'] // 展开“变量内容”和“执行任务”
     },
