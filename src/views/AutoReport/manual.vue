@@ -13,7 +13,7 @@
             :on-change="handleFileUpload"
             :auto-upload="false"
           >
-            <el-button type="primary" :disabled="uploadButtonDisabled">导入文件</el-button>
+            <el-button type="primary" :disabled="uploadButtonDisabled">导入模板</el-button>
           </el-upload>
           <el-progress :percentage="uploadProgress" :status="uploadStatus" class="progress-bar" />
         </div>
@@ -85,7 +85,7 @@ export default {
       const formData = new FormData()
       formData.append('file', file.raw)
 
-      fetch('http://localhost:5000/upload', {
+      fetch(`http://localhost:${process.env.VUE_APP_API_PORT}/upload`, {
         method: 'POST',
         body: formData
       })
@@ -121,7 +121,7 @@ export default {
       this.executionLog += '开始执行...\n'
 
       // 调用后端 /generate 接口
-      fetch('http://localhost:5000/generate', {
+      fetch(`http://localhost:${process.env.VUE_APP_API_PORT}/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -141,7 +141,7 @@ export default {
 
           // 使用 setInterval 定期获取进度
           const intervalId = setInterval(() => {
-            fetch(`http://localhost:5000/progress/${this.taskId}`)
+            fetch(`http://localhost:${process.env.VUE_APP_API_PORT}/progress/${this.taskId}`)
               .then(response => {
                 if (response.ok) {
                   return response.json()
@@ -200,7 +200,7 @@ export default {
       }
 
       // 构造下载链接
-      const downloadUrl = `http://localhost:5000/download/${this.outputFile}`
+      const downloadUrl = `http://localhost:${process.env.VUE_APP_API_PORT}/download/${this.outputFile}`
 
       // 创建一个隐藏的 <a> 元素
       const link = document.createElement('a')
@@ -247,7 +247,7 @@ export default {
         })
         if (this.isExecuting) {
         // 调用后端 API 终止任务
-          fetch(`http://localhost:5000/reset/${this.taskId}`, {
+          fetch(`http://localhost:${process.env.VUE_APP_API_PORT}/reset/${this.taskId}`, {
             method: 'POST'
           })
             .then(response => {
