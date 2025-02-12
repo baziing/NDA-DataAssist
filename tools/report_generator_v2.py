@@ -12,6 +12,8 @@ import logging
 from datetime import datetime
 from openpyxl.formatting.rule import DataBarRule, ColorScaleRule
 
+UPLOAD_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'tmp', 'uploads')) 
+
 def generate_report(input_file, task, output_file=None):
     """
     生成报表
@@ -32,6 +34,22 @@ def generate_report(input_file, task, output_file=None):
         df = pd.read_excel(input_path)
         task.update_progress({'progress':5, 'log':'读取输入文件'})  # 读取输入文件后：更新 5%
         
+        # 读取变量文件（如果存在）
+        variables = {}
+        variables_file = os.path.join(UPLOAD_FOLDER, 'variables.xlsx')
+        if os.path.exists(variables_file):
+            try:
+                variables_df = pd.read_excel(variables_file)
+                # 转换为小写，以支持大小写不敏感的列名
+                variables_df.columns = variables_df.columns.str.lower()
+                if 'key' in variables_df.columns and 'value' in variables_df.columns:
+                    # 使用原始的键名（区分大小写）
+                    variables = dict(zip(variables_df['key'], variables_df['value']))
+                else:
+                    logging.warning('变量文件格式不正确，缺少 key 或 value 列。')
+            except Exception as e:
+                logging.error(f'读取变量文件失败: {e}')
+
         # 计算 SQL 查询的总数
         total_queries = len(df)
 
@@ -69,6 +87,12 @@ def generate_report(input_file, task, output_file=None):
                 'password': row.get('db_password', DB_CONFIG['password']),
                 'database': db_name  # 使用指定的数据库名
             }
+
+            # 变量替换
+            if variables:
+              for key, value in variables.items():
+                sql = sql.replace('{' + key + '}', str(value))
+            task.update_progress({'progress':10, 'log':'变量替换完成'})
             
             # 连接数据库并执行查询
             connection = connect_db_with_config(db_config)
@@ -76,7 +100,7 @@ def generate_report(input_file, task, output_file=None):
             # task.update_progress({'progress':20, 'log':f'第 {index + 1} 个 SQL 开始执行'}) # 连接数据库并执行查询后: 更新 20%
             # 计算当前进度
             completed_queries = index + 1
-            progress = 5 + int((((completed_queries-1)*3+1) / total_queries/3) * 55) # 假设 SQL 查询占 55% 的进度
+            progress = 10 + int((((completed_queries-1)*3+1) / total_queries/3) * 50) # 假设 SQL 查询占 55% 的进度
             task.update_progress({'progress': progress, 'log': f'第 {index + 1} 个 SQL 开始执行'})
             if task.cancelled:  # 检查是否取消
                 logging.warning(f'Task cancelled after executing SQL {index + 1}')

@@ -8,11 +8,17 @@ import time
 import logging
 from datetime import datetime
 
+from dotenv import load_dotenv
+from pathlib import Path  # 导入 Path
+
+dotenv_path = Path('.') / '.env.development'  # 指定 .env.development 文件的路径
+load_dotenv(dotenv_path=dotenv_path)
+
 # 将tools目录添加到Python路径
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'tools')))
 
 # 导入report_generator.py中的函数和config模块
-from report_generator import process_single_file
+from report_generator_v2 import generate_report
 from config import OUTPUT_DIR, DB_CONFIG
 from report_task import ReportTask
 
@@ -96,5 +102,43 @@ def reset_task(task_id):
     else:
         return jsonify({'error': 'Task not found'}), 404
 
+# 定义全局变量
+ALLOWED_EXTENSIONS = {'xlsx'}
+
+# 检查文件扩展名是否合法
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@app.route('/upload_vars', methods=['POST'])
+def upload_vars():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+    if file and allowed_file(file.filename):
+        filename = "variables.xlsx"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(filepath)
+        # 解析变量文件
+        try:
+            variables = []
+            df = pd.read_excel(filepath, sheet_name=0)
+            # 检查列名是否存在，并且转换为小写
+            expected_columns = ['key', 'value']
+            actual_columns = [col.lower() for col in df.columns]
+            if not all(col in actual_columns for col in expected_columns):
+                raise ValueError(f'Invalid file format. Expected columns: {expected_columns}')
+            # 提取 key 和 value 列
+            for index, row in df.iterrows():
+              key = row['key']
+              value = row['value']
+              variables.append({'key': str(key), 'value': str(value)})
+            return jsonify({'message': 'File uploaded and variables extracted successfully', 'variables': variables}), 200
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
+    else:
+        return jsonify({'error': 'Invalid file type'}), 400
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=int(os.environ.get('VUE_APP_API_PORT')))

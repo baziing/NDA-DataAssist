@@ -5,7 +5,7 @@
       <i class="el-icon-refresh reset-icon" title="重置任务" @click="handleResetTask" />
     </div>
     <el-collapse v-model="activeNames" @change="handleCollapseChange">
-      <el-collapse-item title="新建" name="1">
+      <el-collapse-item title="新建任务" name="1">
         <div class="progress-item">
           <el-upload
             action="#"
@@ -15,25 +15,65 @@
           >
             <el-button type="primary" :disabled="uploadButtonDisabled">导入模板</el-button>
           </el-upload>
-          <el-progress :percentage="uploadProgress" :status="uploadStatus" class="progress-bar" />
+          <el-progress :percentage="uploadProgress" :status="uploadStatus" class="progress-bar" style="margin-left: 10px;" />
         </div>
       </el-collapse-item>
-      <el-collapse-item title="基本信息" name="2">
+      <el-collapse-item title="模板信息" name="2">
         <div>提交时间：{{ submitTime }}</div>
         <div>文件名：{{ uploadedFilename }}</div>
         <div>文件大小：{{ fileSize }}</div>
       </el-collapse-item>
-      <el-collapse-item title="执行" name="3">
+      <el-collapse-item title="导入变量" name="5">
+        <div>
+          <div class="progress-item">
+            <el-button :style="{ width: '40px' }" type="danger" size="medium" :disabled="skipButtonDisabled" @click="handleSkipVariables">SKIP</el-button>
+            <el-upload
+              action="#"
+              :show-file-list="false"
+              :on-change="handleVarFileUpload"
+              :auto-upload="false"
+              style="margin-left: 0px;"
+            >
+              <el-button :style="{ width: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }" type="primary" :disabled="skipButtonDisabled">上传</el-button>
+            </el-upload>
+            <el-progress :percentage="uploadVarProgress" :status="uploadVarStatus" class="progress-bar" style="margin-left: 10px;" />
+          </div>
+        </div>
+      </el-collapse-item>
+      <el-collapse-item title="变量内容" name="6">
+        <div v-if="showVariables">
+          <div v-if="variables && variables.length > 0">
+            <table>
+              <thead>
+                <tr>
+                  <th>Key</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="variable in variables" :key="variable.key">
+                  <td>{{ variable.key }}</td>
+                  <td>{{ variable.value }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else>
+            没有导入变量
+          </div>
+        </div>
+      </el-collapse-item>
+      <el-collapse-item title="执行任务" name="3">
         <div class="progress-item">
-          <el-button type="primary" :disabled="startButtonDisabled" @click="handleStart">开始执行</el-button>
+          <el-button type="primary" :disabled="startButtonDisabled" style="display: flex; align-items: center; justify-content: center;" @click="handleStart">开始执行</el-button>
           <el-progress :percentage="executionProgress" :status="executionStatus" class="progress-bar" />
         </div>
         <div class="log-container">
           <pre>{{ executionLog }}</pre>
         </div>
       </el-collapse-item>
-      <el-collapse-item title="下载" name="4">
-        <el-button type="primary" :disabled="downloadButtonDisabled" style="margin-bottom: 10px;" @click="handleDownload">导出文件</el-button>
+      <el-collapse-item title="下载结果" name="4">
+        <el-button type="primary" :disabled="downloadButtonDisabled" style="margin-bottom: 10px; display: flex; align-items: center; justify-content: center;" @click="handleDownload">导出文件</el-button>
         <div>文件名：{{ outputFileName }}</div>
         <div>文件大小：{{ outputFileSize }}</div>
       </el-collapse-item>
@@ -57,15 +97,20 @@ export default {
       file: null,
       uploadedFilename: null,
       outputFile: null,
-      uploadButtonDisabled: false,
-      startButtonDisabled: true,
-      downloadButtonDisabled: true,
+      uploadButtonDisabled: false, // 初始时启用上传模板按钮
+      skipButtonDisabled: true, // 初始禁用“SKIP”和“上传”
+      startButtonDisabled: true, // 初始时禁用开始按钮
+      downloadButtonDisabled: true, // 初始时禁用下载按钮
       isExecuting: false,
       submitTime: null, // 提交时间
       fileSize: null, // 文件大小
       outputFileSize: null, // 输出文件大小
       executionLog: '', // 执行日志
-      outputFileName: null // 添加这一行
+      outputFileName: null, // 添加这一行
+      variables: [], // 存储变量
+      showVariables: false, // 控制变量内容显示
+      uploadVarProgress: 0,
+      uploadVarStatus: null
     }
   },
   methods: {
@@ -73,7 +118,7 @@ export default {
       this.uploadProgress = 0
       this.$forceUpdate()
       this.uploadStatus = 'success'
-      this.startButtonDisabled = false
+      this.startButtonDisabled = true // 上传模板后禁用开始按钮
       this.downloadButtonDisabled = true
       this.executionProgress = 0
       this.executionStatus = null
@@ -100,7 +145,6 @@ export default {
         })
         .then(data => {
           this.uploadProgress = 100
-          this.uploadProgress = 100
           this.uploadStatus = 'success'
           console.log(data.message)
           this.uploadedFilename = data.original_filename
@@ -108,12 +152,53 @@ export default {
           this.fileSize = (file.raw.size / 1024).toFixed(2) + ' KB'
           this.file = file // 将 file 对象赋值给 this.file
           this.filename = data.filename // 保存上传后返回的filename
-          this.activeNames = ['1', '2', '3']
+          this.activeNames = ['1', '2', '5'] // 展开“模板信息”和“导入变量”
+          this.skipButtonDisabled = false // 启用“SKIP”和“上传”按钮
         })
         .catch(error => {
           console.error('Error:', error)
           this.uploadStatus = 'exception'
         })
+    },
+    // 新增处理变量文件上传
+    handleVarFileUpload(file) {
+      this.uploadVarProgress = 0
+      this.$forceUpdate()
+      this.uploadVarStatus = 'success'
+      this.startButtonDisabled = false // 上传变量后启用开始按钮
+      this.activeNames = ['1', '2', '5', '6', '3'] // 展开“变量内容”和“执行任务”
+      console.log('变量文件已选择:', file)
+
+      const formData = new FormData()
+      formData.append('file', file.raw)
+
+      fetch(`http://localhost:${process.env.VUE_APP_API_PORT}/upload_vars`, {
+        method: 'POST',
+        body: formData
+      })
+        .then(response => {
+          if (response.ok) {
+            return response.json()
+          } else {
+            throw new Error('变量文件上传失败')
+          }
+        })
+        .then(data => {
+          this.uploadVarProgress = 100
+          this.uploadVarStatus = 'success'
+          this.variables = data.variables // 假设后端返回的变量数据在 data.variables 中
+          this.showVariables = true
+          console.log('变量文件上传成功:', data)
+        })
+        .catch(error => {
+          console.error('Error:', error)
+          this.uploadVarStatus = 'exception'
+        })
+    },
+    handleSkipVariables() {
+      this.showVariables = true
+      this.startButtonDisabled = false // 点击“SKIP”后启用开始按钮
+      this.activeNames = ['1', '2', '5', '6', '3'] // 展开“变量内容”和“执行任务”
     },
     handleStart() {
       console.log('开始执行')
@@ -121,7 +206,7 @@ export default {
       this.isExecuting = true
       this.executionLog = ''
       this.executionLog += '开始执行...\n'
-
+      this.activeNames = ['1', '2', '5', '3']
       // 调用后端 /generate 接口
       fetch(`http://localhost:${process.env.VUE_APP_API_PORT}/generate`, {
         method: 'POST',
@@ -160,10 +245,10 @@ export default {
                   this.outputFile = progressData.output_file
                   this.outputFileName = progressData.output_filename
                   this.outputFileSize = (progressData.output_file_size / 1024).toFixed(2) + ' KB' // 后续需要后端提供
-                  this.downloadButtonDisabled = false
+                  this.downloadButtonDisabled = false // 启用下载按钮
                   this.uploadButtonDisabled = true
                   this.isExecuting = false
-                  this.activeNames = ['1', '2', '3', '4'] // 展开“下载”面板
+                  this.activeNames = ['1', '2', '5', '6', '3', '4'] // 展开“下载结果”
                   clearInterval(intervalId) // 成功后清除 interval
                 } else if (progressData.status === 'failed') {
                   this.executionStatus = 'exception'
@@ -191,11 +276,6 @@ export default {
         })
     },
     handleDownload() {
-      if (!this.outputFile) {
-        alert('请先生成报表')
-        return
-      }
-
       if (!this.outputFile) {
         alert('请先生成报表')
         return
@@ -238,6 +318,8 @@ export default {
       this.outputFileSize = null
       this.executionLog = ''
       this.activeNames = ['1'] // 重置折叠面板
+      this.variables = []
+      this.showVariables = false
     },
     // 添加确认对话框
     async handleResetTask() {
@@ -302,6 +384,9 @@ export default {
 .progress-item .el-button {
   margin-right: 20px;
   width: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .progress-bar {
