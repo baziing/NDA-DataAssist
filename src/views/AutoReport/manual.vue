@@ -44,20 +44,22 @@
       <el-collapse-item title="变量内容" name="6">
         <div v-if="showVariables">
           <div v-if="variables && variables.length > 0">
-            <table>
-              <thead>
-                <tr>
-                  <th>Key</th>
-                  <th>Value</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="variable in variables" :key="variable.key">
-                  <td>{{ variable.key }}</td>
-                  <td>{{ variable.value }}</td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="log-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Key</th>
+                    <th>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="variable in variables" :key="variable.key">
+                    <td>{{ variable.key }}</td>
+                    <td>{{ variable.value }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
           <div v-else>
             没有导入变量
@@ -176,23 +178,29 @@ export default {
         method: 'POST',
         body: formData
       })
-        .then(response => {
+        .then((response) => {
           if (response.ok) {
             return response.json()
           } else {
-            throw new Error('变量文件上传失败')
+            // 处理 HTTP 错误
+            return response.json().then((data) => {
+              throw new Error(data.error || '变量文件上传失败')
+            })
           }
         })
-        .then(data => {
-        // this.uploadVarProgress = 100;
-        // this.uploadVarStatus = 'success';
-          this.variables = data.variables // 假设后端返回的变量数据在 data.variables 中
+        .then((data) => {
+          this.variables = data.variables
           this.showVariables = true
           console.log('变量文件上传成功:', data)
+          this.uploadVarProgress = 100
+          this.uploadVarStatus = 'success'
         })
-        .catch(error => {
+        .catch((error) => {
           console.error('Error:', error)
           this.uploadVarStatus = 'exception'
+          this.$message.error(error.message) // 显示错误信息
+          this.startButtonDisabled = true // 禁用“执行任务”
+          this.variables = [] // 清空变量
         })
     },
     handleVarUploadProgress(event, file, fileList) {
@@ -407,6 +415,19 @@ export default {
   overflow-y: auto;
   background-color: #f8f8f8;
 }
+
+.log-container table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.log-container th,
+.log-container td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+}
+
 .header-container {
   display: flex;
   justify-content: space-between;

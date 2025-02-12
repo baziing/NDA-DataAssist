@@ -139,10 +139,18 @@ def upload_vars():
             if not all(col in actual_columns for col in expected_columns):
                 raise ValueError(f'Invalid file format. Expected columns: {expected_columns}')
             # 提取 key 和 value 列
+            keys = []
             for index, row in df.iterrows():
               key = row['key']
               value = row['value']
+              keys.append(str(key))
               variables.append({'key': str(key), 'value': str(value)})
+
+            # 检查是否有重复的 key
+            if len(keys) != len(set(keys)):
+                duplicates = [key for key in keys if keys.count(key) > 1]
+                raise ValueError(f'Duplicate keys found: {", ".join(duplicates)}')
+
             return jsonify({'message': 'File uploaded and variables extracted successfully', 'variables': variables, 'filename': filename}), 200 #增加filename返回
         except Exception as e:
             print(f"Error processing file: {e}") # 打印详细错误
