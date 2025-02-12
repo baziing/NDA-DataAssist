@@ -24,14 +24,16 @@
         <div>文件大小：{{ fileSize }}</div>
       </el-collapse-item>
       <el-collapse-item title="执行" name="3">
-        <el-button type="primary" :disabled="startButtonDisabled" @click="handleStart">开始执行</el-button>
-        <el-progress :percentage="executionProgress" :status="executionStatus" class="progress-bar" />
+        <div class="progress-item">
+          <el-button type="primary" :disabled="startButtonDisabled" @click="handleStart">开始执行</el-button>
+          <el-progress :percentage="executionProgress" :status="executionStatus" class="progress-bar" />
+        </div>
         <div class="log-container">
           <pre>{{ executionLog }}</pre>
         </div>
       </el-collapse-item>
       <el-collapse-item title="下载" name="4">
-        <el-button type="primary" :disabled="downloadButtonDisabled" @click="handleDownload">导出文件</el-button>
+        <el-button type="primary" :disabled="downloadButtonDisabled" style="margin-bottom: 10px;" @click="handleDownload">导出文件</el-button>
         <div>文件名：{{ outputFileName }}</div>
         <div>文件大小：{{ outputFileSize }}</div>
       </el-collapse-item>
