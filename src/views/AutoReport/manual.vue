@@ -24,20 +24,18 @@
         <div>文件大小：{{ fileSize }}</div>
       </el-collapse-item>
       <el-collapse-item title="导入变量" name="5">
-        <div>
-          <div class="progress-item">
-            <el-button :style="{ width: '40px' }" type="danger" size="medium" :disabled="skipButtonDisabled" @click="handleSkipVariables">SKIP</el-button>
-            <el-upload
-              action="#"
-              :show-file-list="false"
-              :on-change="handleVarFileUpload"
-              :on-progress="handleVarUploadProgress"
-              :auto-upload="false"
-              style="margin-left: 5px;"
-            >
-              <el-button :style="{ width: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }" type="primary" :disabled="skipButtonDisabled">上传</el-button>
-            </el-upload>
-          </div>
+        <div class="progress-item">
+          <el-button :style="{ width: '40px' }" type="danger" size="medium" :disabled="skipButtonDisabled" @click="handleSkipVariables">SKIP</el-button>
+          <el-upload
+            action="#"
+            :show-file-list="false"
+            :on-change="handleVarFileUpload"
+            :on-progress="handleVarUploadProgress"
+            :auto-upload="false"
+            style="margin-left: 0px;"
+          >
+            <el-button :style="{ width: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }" type="primary" :disabled="skipButtonDisabled">上传</el-button>
+          </el-upload>
           <el-progress :percentage="uploadVarProgress" :status="uploadVarStatus" class="progress-bar" style="margin-left: 10px;" />
         </div>
       </el-collapse-item>
@@ -69,7 +67,7 @@
       <el-collapse-item title="执行任务" name="3">
         <div class="progress-item">
           <el-button type="primary" :disabled="startButtonDisabled" style="display: flex; align-items: center; justify-content: center;">开始执行</el-button>
-          <el-progress :percentage="executionProgress" :status="executionStatus" class="progress-bar" />
+          <el-progress :percentage="executionProgress" :status="executionStatus" class="progress-bar" style="margin-left: 10px;" />
         </div>
         <div class="log-container">
           <pre>{{ executionLog }}</pre>
