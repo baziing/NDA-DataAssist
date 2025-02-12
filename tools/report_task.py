@@ -42,15 +42,12 @@ class ReportTask:
         try:
             # 模拟执行过程，实际情况需要根据process_single_file的实现来更新进度,这里设置几个关键节点来更新
             logging.info(f'开始处理文件: {self.input_file}')
-            self.logs.append(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - 开始处理文件: {self.input_file}')
-            # 模拟执行过程，实际情况需要根据process_single_file的实现来更新进度,这里设置几个关键节点来更新
-            logging.info(f'开始处理文件: {self.input_file}')
-            self.logs.append(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - 开始处理文件: {self.input_file}')
+            self.logs.append(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - 开始处理文件: {self.original_filename}')
             self.output_file = generate_report(self.input_file,self)
             self.status = 'success'
             self.output_file_size = os.path.getsize(self.output_file) # 获取文件大小
-            logging.info(f'文件处理成功，输出文件: {self.output_file}')
-            self.logs.append(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - 文件处理成功，输出文件: {self.output_file}')
+            logging.info(f'文件处理成功')
+            self.logs.append(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - 文件处理成功')
         except Exception as e:
             self.status = 'failed'
             self.error = str(e)

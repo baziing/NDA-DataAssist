@@ -31,6 +31,9 @@ def generate_report(input_file, task, output_file=None):
         input_path = input_file
         df = pd.read_excel(input_path)
         task.update_progress({'progress':5, 'log':'读取输入文件'})  # 读取输入文件后：更新 5%
+        
+        # 计算 SQL 查询的总数
+        total_queries = len(df)
 
         # 创建输出工作簿
         wb = Workbook()
@@ -70,8 +73,13 @@ def generate_report(input_file, task, output_file=None):
             # 连接数据库并执行查询
             connection = connect_db_with_config(db_config)
             columns, data = execute_query(connection, sql)
-            task.update_progress({'progress':20, 'log':'连接数据库并执行查询'}) # 连接数据库并执行查询后: 更新 20%
+            # task.update_progress({'progress':20, 'log':f'第 {index + 1} 个 SQL 开始执行'}) # 连接数据库并执行查询后: 更新 20%
+            # 计算当前进度
+            completed_queries = index + 1
+            progress = 5 + int((((completed_queries-1)*3+1) / total_queries/3) * 55) # 假设 SQL 查询占 55% 的进度
+            task.update_progress({'progress': progress, 'log': f'第 {index + 1} 个 SQL 开始执行'})
             if task.cancelled:  # 检查是否取消
+                logging.warning(f'Task cancelled after executing SQL {index + 1}')
                 raise Exception('Task cancelled')
 
             # 转置处理
@@ -110,6 +118,9 @@ def generate_report(input_file, task, output_file=None):
                     cell.border = thin_border
                     if task.cancelled:  # 检查是否取消
                         raise Exception('Task cancelled')
+                    
+            progress = 5 + int((((completed_queries-1)*3+2) / total_queries/3) * 55)
+            task.update_progress({'progress': progress, 'log': f'第 {index + 1} 个 SQL 应用样式'})
             
             # 应用自定义样式
             if format_rules:
@@ -197,6 +208,10 @@ def generate_report(input_file, task, output_file=None):
                 start_row = summary_row_offset
                 start_col = 1
             
+            # 开始写入汇总表之前，更新进度
+            progress = 5 + int((((completed_queries-1)*3+3) / total_queries/3) * 55)
+            task.update_progress({'progress': progress, 'log': f'第 {index + 1} 个 SQL 结果写入汇总表'})
+            
             # 将临时表所有数据合并到汇总表，包括格式
             max_row = temp_ws.max_row
             max_col = temp_ws.max_column
@@ -282,6 +297,9 @@ def generate_report(input_file, task, output_file=None):
                 summary_row_offset += 1
             
             summary_row_offset += 1  # 每个报表之间空一行
+        
+         # 完成数据写入,开始应用样式之前, 更新进度
+        task.update_progress({'progress':70, 'log':'完成数据写入,开始应用样式'})
 
         # 完成数据插入后：新增标题行和首列
         # 保存所有条件格式规则及其范围
@@ -326,6 +344,9 @@ def generate_report(input_file, task, output_file=None):
             
             # 应用更新后的条件格式
             summary_ws.conditional_formatting.add(new_range, rule)
+        
+        # 完成样式和条件格式写入后, 更新进度
+        task.update_progress({'progress':80, 'log':'完成样式和条件格式写入'})
 
 
         # 设置第一行的列宽为3，其他列宽为13
@@ -334,6 +355,9 @@ def generate_report(input_file, task, output_file=None):
                 summary_ws.column_dimensions[chr(64 + col)].width = 3  # 第一列设置为3
             else:
                 summary_ws.column_dimensions[chr(64 + col)].width = 13  # 其他列设置为13
+        
+        # 完成所有数据插入,新增标题和首列之前, 更新进度
+        task.update_progress({'progress':90, 'log':'完成所有数据插入,调整样式'})
 
         # 生成输出文件名
         # base_name = os.path.basename(input_file)
@@ -360,15 +384,6 @@ def generate_report(input_file, task, output_file=None):
         file_name_without_ext = os.path.splitext(task.original_filename)[0]
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         output_file = f"{file_name_without_ext}_{timestamp}.xlsx"
-
-        # 开始写入汇总表之前，更新进度
-        task.update_progress({'progress':30, 'log':'开始写入汇总表'})
-        # 完成数据写入,开始应用样式之前, 更新进度
-        task.update_progress({'progress':60, 'log':'完成数据写入,开始应用样式'})
-        # 完成样式和条件格式写入后, 更新进度
-        task.update_progress({'progress':80, 'log':'完成样式和条件格式写入'})
-        # 完成所有数据插入,新增标题和首列之前, 更新进度
-        task.update_progress({'progress':90, 'log':'完成所有数据插入,新增标题和首列'})
 
         # 删除所有临时表
         temp_sheets = [sheet for sheet in wb.sheetnames if sheet.startswith('临时表')]
