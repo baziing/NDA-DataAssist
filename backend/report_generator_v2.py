@@ -22,12 +22,8 @@ def generate_report(input_file, task, variables_filename=None, output_file=None)
         # 获取当前日期作为目录
         date_str = datetime.now().strftime('%Y%m%d')
         # 创建日期目录
-        output_subdir = os.path.join(OUTPUT_DIR['report'], date_str)
+        output_subdir = os.path.join('output', 'report-manual', date_str)
         ensure_dir_exists(output_subdir)
-
-        # 调试：打印 OUTPUT_DIR['report'] 和 output_subdir
-        print(f"OUTPUT_DIR['report']: {OUTPUT_DIR['report']}")
-        print(f"output_subdir: {output_subdir}")
 
         # 读取输入文件
         input_path = input_file
