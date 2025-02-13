@@ -12,7 +12,7 @@ import logging
 from datetime import datetime
 from openpyxl.formatting.rule import DataBarRule, ColorScaleRule
 
-UPLOAD_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'tmp', 'uploads')) 
+UPLOAD_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'tmp'))
 
 def generate_report(input_file, task, variables_filename=None, output_file=None):
     """
@@ -36,15 +36,11 @@ def generate_report(input_file, task, variables_filename=None, output_file=None)
 
         # 读取变量文件（如果存在）
         variables = {}
-        # 存储变量文件名到 task.status
+        variables_file = None
         if variables_filename:
-            task.status['variables_filename'] = variables_filename
-        variables_file = os.path.join(UPLOAD_FOLDER, 'variables.xlsx')  # 默认文件名
-        # 检查是否存在变量文件名
-        if 'variables_filename' in task.status and task.status['variables_filename']:
-            variables_file = os.path.join(UPLOAD_FOLDER, task.status['variables_filename'])
+            variables_file = os.path.join(UPLOAD_FOLDER, 'variables', variables_filename)
         logging.warning(f'{variables_file}')
-        if os.path.exists(variables_file):
+        if variables_file and os.path.exists(variables_file):
             try:
                 variables_df = pd.read_excel(variables_file)
                 # 转换为小写，以支持大小写不敏感的列名

@@ -27,9 +27,15 @@ app = Flask(__name__)
 CORS(app)  # 启用 CORS
 
 # 确保上传目录存在
-UPLOAD_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'tmp', 'uploads'))
+UPLOAD_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'tmp'))
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# 创建 templates 和 variables 文件夹
+TEMPLATES_FOLDER = os.path.join(UPLOAD_FOLDER, 'templates')
+VARIABLES_FOLDER = os.path.join(UPLOAD_FOLDER, 'variables')
+os.makedirs(TEMPLATES_FOLDER, exist_ok=True)
+os.makedirs(VARIABLES_FOLDER, exist_ok=True)
 
 # 存储任务的字典，key为uuid，value为ReportTask对象
 tasks = {}
@@ -44,7 +50,7 @@ def upload_file():
     if file and allowed_file(file.filename):
         # 生成唯一文件名
         filename = str(uuid.uuid4()) + '.xlsx'
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        filepath = os.path.join(TEMPLATES_FOLDER, filename)
         file.save(filepath)
 
         # 检查模板文件格式
@@ -68,19 +74,23 @@ def generate_report_route():
     original_filename = data.get('original_filename')  # 获取原始文件名
     if not filename:
         return jsonify({'error': 'No filename provided'}), 400
-    # 使用original_filename
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    if not os.path.exists(filepath):
-        return jsonify({'error': 'File not found'}), 404
+
+    # 尝试从 templates 文件夹中查找文件
+    filepath = os.path.join(TEMPLATES_FOLDER, filename)
+    if os.path.exists(filepath):
+        pass  # 文件存在，使用该路径
+    else:
+        # 尝试从 variables 文件夹中查找文件
+        filepath = os.path.join(VARIABLES_FOLDER, filename)
+        if os.path.exists(filepath):
+            pass  # 文件存在，使用该路径
+        else:
+            return jsonify({'error': 'File not found'}), 404
 
     # 创建一个uuid作为task_id
     task_id = str(uuid.uuid4())
-    task = ReportTask(filepath, original_filename)  # 传递 original_filename
-    # 将变量文件名传递给 ReportTask 对象
     variables_filename = data.get('variables_filename')
-    if variables_filename:
-        task.status['variables_filename'] = variables_filename
-    task.variables_filename = variables_filename
+    task = ReportTask(filepath, original_filename, variables_filename)  # 传递 original_filename
     tasks[task_id] = task
     task.start()
     return jsonify({'message': 'Report generation started', 'task_id': task_id}), 200
@@ -143,7 +153,7 @@ def upload_vars():
     if file and allowed_file(file.filename):
         # 生成唯一文件名
         filename = str(uuid.uuid4()) + '.xlsx'
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        filepath = os.path.join(VARIABLES_FOLDER, filename)
         file.save(filepath)
 
         print(f"File saved to: {filepath}") # 打印文件保存路径

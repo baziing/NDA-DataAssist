@@ -25,7 +25,7 @@ logging.basicConfig(
 )
 
 class ReportTask:
-    def __init__(self, input_file, original_filename):
+    def __init__(self, input_file, original_filename, variables_filename=None):
         self.input_file = input_file
         self.original_filename = original_filename  # 存储原始文件名
         self.output_file = None
@@ -37,7 +37,7 @@ class ReportTask:
         self.logs = []  # 新增日志列表
         self.output_file_size = None  # 新增文件大小属性
         self.cancelled = False  # 新增取消标志
-        self.variables_filename = None
+        self.variables_filename = variables_filename
 
     def run(self):
         self.status['status'] = 'running'
