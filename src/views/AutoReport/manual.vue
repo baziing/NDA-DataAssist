@@ -40,33 +40,31 @@
         </div>
       </el-collapse-item>
       <el-collapse-item title="变量内容" name="6">
-        <div v-if="showVariables">
-          <div v-if="variables && variables.length > 0">
-            <div class="log-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Key</th>
-                    <th>Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="variable in variables" :key="variable.key">
-                    <td>{{ variable.key }}</td>
-                    <td>{{ variable.value }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div v-else>
-            没有导入变量
+        <div v-if="!showVariables || (showVariables && (!variables || variables.length === 0))">
+          没有导入变量
+        </div>
+        <div v-else>
+          <div class="log-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Key</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="variable in variables" :key="variable.key">
+                  <td>{{ variable.key }}</td>
+                  <td>{{ variable.value }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </el-collapse-item>
       <el-collapse-item title="执行任务" name="3">
         <div class="progress-item">
-          <el-button type="primary" :disabled="startButtonDisabled" style="display: flex; align-items: center; justify-content: center;">开始执行</el-button>
+          <el-button type="primary" :disabled="startButtonDisabled" style="display: flex; align-items: center; justify-content: center;" @click="handleStart">开始执行</el-button>
           <el-progress :percentage="executionProgress" :status="executionStatus" class="progress-bar" style="margin-left: 10px;" />
         </div>
         <div class="log-container">
@@ -108,6 +106,7 @@ export default {
       outputFileSize: null, // 输出文件大小
       executionLog: '', // 执行日志
       outputFileName: null, // 添加这一行
+      variables_filename: null, // 存储变量文件名
       variables: [], // 存储变量
       showVariables: false, // 控制变量内容显示
       uploadVarProgress: 0,
@@ -201,6 +200,7 @@ export default {
         .then((data) => {
           this.variables = data.variables
           this.showVariables = true
+          this.variables_filename = data.filename
           console.log('变量文件上传成功:', data)
           this.uploadVarProgress = 100
           this.uploadVarStatus = 'success'
@@ -218,11 +218,13 @@ export default {
       this.uploadVarStatus = this.uploadVarProgress === 100 ? 'success' : 'uploading'
     },
     handleSkipVariables() {
-      this.showVariables = true
+      this.showVariables = false
       this.uploadVarProgress = 0
       this.uploadVarStatus = null
       this.startButtonDisabled = false // 点击“SKIP”后启用开始按钮
       this.activeNames = ['1', '2', '5', '6', '3'] // 展开“变量内容”和“执行任务”
+      this.variables_filename = null
+      this.variables = []
     },
     handleStart() {
       console.log('开始执行')
@@ -230,14 +232,18 @@ export default {
       this.isExecuting = true
       this.executionLog = ''
       this.executionLog += '开始执行...\n'
-      this.activeNames = ['1', '2', '5', '3']
+      this.activeNames = ['1', '2', '5', '3', '6']
       // 调用后端 /generate 接口
       fetch(`http://localhost:${process.env.VUE_APP_API_PORT}/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ filename: this.filename, original_filename: this.uploadedFilename })
+        body: JSON.stringify({
+          filename: this.filename,
+          original_filename: this.uploadedFilename,
+          variables_filename: this.variables_filename
+        })
       })
         .then(response => {
           if (response.ok) {
@@ -262,19 +268,20 @@ export default {
               })
               .then(progressData => {
                 this.executionProgress = progressData.progress
-                this.executionStatus = progressData.status
+                this.executionStatus = progressData.status['status']
                 this.executionLog = progressData.logs.join('\n') // 将日志数组连接成字符串
 
-                if (progressData.status === 'success') {
+                if (progressData.status['status'] === 'success') {
                   this.outputFile = progressData.output_file
                   this.outputFileName = progressData.output_filename
                   this.outputFileSize = (progressData.output_file_size / 1024).toFixed(2) + ' KB' // 后续需要后端提供
                   this.downloadButtonDisabled = false // 启用下载按钮
                   this.uploadButtonDisabled = true
+                  this.skipButtonDisabled = true
                   this.isExecuting = false
                   this.activeNames = ['1', '2', '5', '6', '3', '4'] // 展开“下载结果”
                   clearInterval(intervalId) // 成功后清除 interval
-                } else if (progressData.status === 'failed') {
+                } else if (progressData.status['status'] === 'failed') {
                   this.executionStatus = 'exception'
                   this.startButtonDisabled = false
                   this.isExecuting = false
@@ -344,6 +351,9 @@ export default {
       this.activeNames = ['1'] // 重置折叠面板
       this.variables = []
       this.showVariables = false
+      this.variables_filename = null
+      this.uploadVarProgress = 0
+      this.uploadVarStatus = null
     },
     // 添加确认对话框
     async handleResetTask() {

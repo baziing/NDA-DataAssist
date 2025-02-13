@@ -64,7 +64,7 @@ def upload_file():
 @app.route('/generate', methods=['POST'])
 def generate_report_route():
     data = request.get_json()
-    filename = data.get('filename') # 获取的是uuid生成的文件名
+    filename = data.get('filename')  # 获取的是uuid生成的文件名
     original_filename = data.get('original_filename')  # 获取原始文件名
     if not filename:
         return jsonify({'error': 'No filename provided'}), 400
@@ -75,7 +75,12 @@ def generate_report_route():
 
     # 创建一个uuid作为task_id
     task_id = str(uuid.uuid4())
-    task = ReportTask(filepath, original_filename) # 传递 original_filename
+    task = ReportTask(filepath, original_filename)  # 传递 original_filename
+    # 将变量文件名传递给 ReportTask 对象
+    variables_filename = data.get('variables_filename')
+    if variables_filename:
+        task.status['variables_filename'] = variables_filename
+    task.variables_filename = variables_filename
     tasks[task_id] = task
     task.start()
     return jsonify({'message': 'Report generation started', 'task_id': task_id}), 200
@@ -141,25 +146,17 @@ def upload_vars():
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
 
-        # 检查模板文件格式
-        try:
-            df = pd.read_excel(filepath)
-            required_columns = ['db_name', 'output_sql']
-            if not all(col in df.columns for col in required_columns):
-                raise ValueError(f'Invalid template format. Expected columns: {required_columns}')
-        except Exception as e:
-            os.remove(filepath)  # 格式错误时删除上传的文件
-            return jsonify({'error': f'Error processing template file: {str(e)}'}), 400
-
-        # 生成唯一文件名
-        filename = str(uuid.uuid4()) + '.xlsx'
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
         print(f"File saved to: {filepath}") # 打印文件保存路径
+
+        # 打印文件的 MIME 类型（如果可以获取）
+        if file.content_type:
+            print(f"File MIME type: {file.content_type}")
+
         # 解析变量文件
         try:
+            print(f"Filepath before read_excel: {filepath}")  # 打印 filepath 的值
             variables = []
-            df = pd.read_excel(filepath, sheet_name=0)
+            df = pd.read_excel(filepath)
             # 检查列名是否存在，并且转换为小写
             expected_columns = ['key', 'value']
             actual_columns = [col.lower() for col in df.columns]
@@ -182,6 +179,8 @@ def upload_vars():
             return jsonify({'message': 'File uploaded and variables extracted successfully', 'variables': variables, 'filename': filename}), 200 #增加filename返回
         except Exception as e:
             print(f"Error processing file: {e}") # 打印详细错误
+            print(f"Exception type: {type(e)}")  # 打印异常类型
+            print(f"Exception args: {e.args}")  # 打印异常参数
             return jsonify({'error': f'Error processing file: {str(e)}'}), 400  # 更详细的错误信息
     else:
         return jsonify({'error': 'Invalid file type'}), 400

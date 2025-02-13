@@ -14,7 +14,7 @@ from openpyxl.formatting.rule import DataBarRule, ColorScaleRule
 
 UPLOAD_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'tmp', 'uploads')) 
 
-def generate_report(input_file, task, output_file=None):
+def generate_report(input_file, task, variables_filename=None, output_file=None):
     """
     生成报表
     """
@@ -24,7 +24,7 @@ def generate_report(input_file, task, output_file=None):
         # 创建日期目录
         output_subdir = os.path.join(OUTPUT_DIR['report'], date_str)
         ensure_dir_exists(output_subdir)
-        
+
         # 调试：打印 OUTPUT_DIR['report'] 和 output_subdir
         print(f"OUTPUT_DIR['report']: {OUTPUT_DIR['report']}")
         print(f"output_subdir: {output_subdir}")
@@ -32,11 +32,18 @@ def generate_report(input_file, task, output_file=None):
         # 读取输入文件
         input_path = input_file
         df = pd.read_excel(input_path)
-        task.update_progress({'progress':5, 'log':'读取输入文件'})  # 读取输入文件后：更新 5%
-        
+        task.update_progress({'progress': 5, 'log': '读取输入文件'})  # 读取输入文件后：更新 5%
+
         # 读取变量文件（如果存在）
         variables = {}
-        variables_file = os.path.join(UPLOAD_FOLDER, 'variables.xlsx')
+        # 存储变量文件名到 task.status
+        if variables_filename:
+            task.status['variables_filename'] = variables_filename
+        variables_file = os.path.join(UPLOAD_FOLDER, 'variables.xlsx')  # 默认文件名
+        # 检查是否存在变量文件名
+        if 'variables_filename' in task.status and task.status['variables_filename']:
+            variables_file = os.path.join(UPLOAD_FOLDER, task.status['variables_filename'])
+        logging.warning(f'{variables_file}')
         if os.path.exists(variables_file):
             try:
                 variables_df = pd.read_excel(variables_file)
@@ -92,7 +99,7 @@ def generate_report(input_file, task, output_file=None):
             if variables:
               for key, value in variables.items():
                 sql = sql.replace('{' + key + '}', str(value))
-            task.update_progress({'progress':10, 'log':'变量替换完成'})
+            task.update_progress({'progress':10, 'log':f'变量替换完成'})
             
             # 连接数据库并执行查询
             connection = connect_db_with_config(db_config)

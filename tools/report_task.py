@@ -27,29 +27,31 @@ logging.basicConfig(
 class ReportTask:
     def __init__(self, input_file, original_filename):
         self.input_file = input_file
-        self.original_filename = original_filename # 存储原始文件名
+        self.original_filename = original_filename  # 存储原始文件名
         self.output_file = None
         self.progress = 0
-        self.status = 'pending'  # pending, running, success, failed
+        self.status = {}  # pending, running, success, failed
+        self.status['state'] = 'pending'
         self.thread = None
         self.error = None
         self.logs = []  # 新增日志列表
-        self.output_file_size = None # 新增文件大小属性
+        self.output_file_size = None  # 新增文件大小属性
         self.cancelled = False  # 新增取消标志
+        self.variables_filename = None
 
     def run(self):
-        self.status = 'running'
+        self.status['status'] = 'running'
         try:
             # 模拟执行过程，实际情况需要根据process_single_file的实现来更新进度,这里设置几个关键节点来更新
             logging.info(f'开始处理文件: {self.input_file}')
             self.logs.append(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - 开始处理文件: {self.original_filename}')
-            self.output_file = generate_report(self.input_file,self)
-            self.status = 'success'
-            self.output_file_size = os.path.getsize(self.output_file) # 获取文件大小
+            self.output_file = generate_report(self.input_file, self, self.variables_filename)
+            self.status['status'] = 'success'
+            self.output_file_size = os.path.getsize(self.output_file)  # 获取文件大小
             logging.info(f'文件处理成功')
             self.logs.append(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - 文件处理成功')
         except Exception as e:
-            self.status = 'failed'
+            self.status['status'] = 'failed'
             self.error = str(e)
             logging.error(f'处理文件失败: {e}')
             self.logs.append(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - 处理文件失败: {e}')
@@ -57,7 +59,6 @@ class ReportTask:
             if not self.cancelled:  # 如果任务没有被取消
                 logging.info('任务完成')
                 self.logs.append(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - 任务完成')
-
     def update_progress(self, progress):
         """更新进度"""
         if isinstance(progress, dict):
