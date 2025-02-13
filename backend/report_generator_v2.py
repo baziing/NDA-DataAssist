@@ -9,10 +9,25 @@ from tools.mail.email_sender import EmailSender
 import os
 import time
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from openpyxl.formatting.rule import DataBarRule, ColorScaleRule
 
 UPLOAD_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'tmp'))
+
+def cleanup_old_files(directory, days=7):
+    """
+    删除指定目录下超过指定天数的文件。
+    """
+    now = time.time()
+    for filename in os.listdir(directory):
+        file_path = os.path.join(directory, filename)
+        if os.path.isfile(file_path):
+            if os.stat(file_path).st_mtime < now - days * 86400:
+                try:
+                    os.remove(file_path)
+                    logging.info(f'删除旧文件: {filename}')
+                except Exception as e:
+                    logging.error(f'删除文件失败: {filename}, 错误: {e}')
 
 def generate_report(input_file, task, variables_filename=None, output_file=None):
     """
@@ -28,7 +43,7 @@ def generate_report(input_file, task, variables_filename=None, output_file=None)
         # 读取输入文件
         input_path = input_file
         df = pd.read_excel(input_path)
-        task.update_progress({'progress': 5, 'log': '读取输入文件'})  # 读取输入文件后：更新 5%
+        task.update_progress({'progress': 5, 'log': '读取输入文件'})
 
         # 读取变量文件（如果存在）
         variables = {}
@@ -450,6 +465,8 @@ def generate_report(input_file, task, variables_filename=None, output_file=None)
                     logging.error('邮件发送失败')
             except Exception as e:
                 logging.error(f'邮件发送失败: {e}')
+            finally:
+                cleanup_old_files(os.path.join(UPLOAD_FOLDER, 'variables'))
         return output_path
     except Exception as e:
         logging.error(f'报表生成失败: {e}')
