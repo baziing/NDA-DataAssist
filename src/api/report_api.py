@@ -10,13 +10,12 @@ from datetime import datetime
 import pandas as pd
 
 from dotenv import load_dotenv
-from pathlib import Path  # 导入 Path
-
+from pathlib import Path  # 指定 .env.development 文件的路径
 dotenv_path = Path('.') / '.env.development'  # 指定 .env.development 文件的路径
 load_dotenv(dotenv_path=dotenv_path)
 
-# 将tools目录添加到Python路径
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'tools')))
+# 将backend目录添加到Python路径
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'backend')))
 
 # 导入report_generator.py中的函数和config模块
 from report_generator_v2 import generate_report
