@@ -158,6 +158,12 @@ export const constantRoutes = [
         component: () => import('@/views/AutoReport/email'), // 子页签3的组件
         name: 'Email',
         meta: { title: '邮件配置' } // 子页签3的标题
+      },
+      {
+        path: 'instruction',
+        component: () => import('@/views/AutoReport/instruction/index'),
+        name: 'Instruction',
+        meta: { title: '使用说明', affix: true }
       }
     ]
   }

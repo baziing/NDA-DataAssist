@@ -195,5 +195,14 @@ def upload_vars():
         return jsonify({'error': 'Invalid file type'}), 400
 
 
+@app.route('/markdown', methods=['GET'])
+def get_markdown():
+    try:
+        with open('src/views/AutoReport/instruction/index.md', 'r', encoding='utf-8') as f:
+            content = f.read()
+        return jsonify({'content': content}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('VUE_APP_API_PORT')))

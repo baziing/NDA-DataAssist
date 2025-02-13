@@ -81,6 +81,13 @@ module.exports = {
       })
       .end()
 
+    config.module
+      .rule('md')
+      .test(/\.md$/)
+      .use('raw-loader')
+      .loader('raw-loader')
+      .end()
+
     config
       .when(process.env.NODE_ENV !== 'development',
         config => {
