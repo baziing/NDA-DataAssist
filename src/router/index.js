@@ -1,5 +1,7 @@
+/* eslint-disable semi */
 import Vue from 'vue'
 import Router from 'vue-router'
+import settings from '@/settings'
 
 Vue.use(Router)
 
@@ -419,6 +421,25 @@ export const asyncRoutes = [
   // 404 page must be placed at the end !!!
   { path: '*', redirect: '/404', hidden: true }
 ]
+
+function filterModules(routes) {
+  if (!routes) return
+  for (const route of routes) {
+    if (settings.hiddenModules.includes(route.name) || (route.meta && route.meta.title === 'External Link')) {
+      route.hidden = true;
+    }
+    if (route.children && route.children.length) {
+      filterModules(route.children)
+    }
+  }
+}
+
+filterModules(constantRoutes)
+filterModules(asyncRoutes)
+filterModules(componentsRouter.children)
+filterModules(chartsRouter.children)
+filterModules(nestedRouter.children)
+filterModules(tableRouter.children)
 
 const createRouter = () => new Router({
   // mode: 'history', // require service support

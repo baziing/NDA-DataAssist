@@ -31,5 +31,11 @@ module.exports = {
    * The default is only used in the production env
    * If you want to also use it in dev, you can pass ['production', 'development']
    */
-  errorLog: 'production'
+  errorLog: 'production',
+
+  /**
+   * @type {string[]}
+   * @description Modules to hide in sidebar. Use route names.
+   */
+  hiddenModules: ['Permission', 'Icons', 'ComponentDemo', 'Charts', 'Nested', 'Table', 'Example', 'Tab', 'ErrorPages', 'ErrorLog', 'Excel', 'Zip', 'PDF', 'Theme', 'ClipboardDemo', 'external-link', 'Guide', 'Documentation']
 }
