@@ -81,7 +81,7 @@ export const constantRoutes = [
         path: 'dashboard',
         component: () => import('@/views/dashboard/index'),
         name: 'Dashboard',
-        meta: { title: '系统介绍', icon: 'el-icon-s-opportunity', affix: true }
+        meta: { title: '系统介绍', icon: 'el-icon-s-opportunity' }
       }
     ]
   },
@@ -93,7 +93,7 @@ export const constantRoutes = [
         path: 'index',
         component: () => import('@/views/documentation/index'),
         name: 'Documentation',
-        meta: { title: 'Documentation', icon: 'documentation', affix: true }
+        meta: { title: 'Documentation', icon: 'documentation' }
       }
     ]
   },
@@ -153,7 +153,7 @@ export const constantRoutes = [
         path: 'instruction',
         component: () => import('@/views/AutoReport/instruction/index'),
         name: 'Instruction',
-        meta: { title: '使用说明', affix: true }
+        meta: { title: '使用说明' }
       }
     ]
   }
