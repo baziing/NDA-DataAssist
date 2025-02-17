@@ -1,243 +1,143 @@
-<p align="center">
-  <img width="320" src="https://wpimg.wallstcn.com/ecc53a42-d79b-42e2-8852-5126b810a4c8.svg">
-</p>
+# NDA 数据报表自动化系统
 
-<p align="center">
-  <a href="https://github.com/vuejs/vue">
-    <img src="https://img.shields.io/badge/vue-2.6.10-brightgreen.svg" alt="vue">
-  </a>
-  <a href="https://github.com/ElemeFE/element">
-    <img src="https://img.shields.io/badge/element--ui-2.7.0-brightgreen.svg" alt="element-ui">
-  </a>
-  <a href="https://travis-ci.org/PanJiaChen/vue-element-admin" rel="nofollow">
-    <img src="https://travis-ci.org/PanJiaChen/vue-element-admin.svg?branch=master" alt="Build Status">
-  </a>
-  <a href="https://github.com/PanJiaChen/vue-element-admin/blob/master/LICENSE">
-    <img src="https://img.shields.io/github/license/mashape/apistatus.svg" alt="license">
-  </a>
-  <a href="https://github.com/PanJiaChen/vue-element-admin/releases">
-    <img src="https://img.shields.io/github/release/PanJiaChen/vue-element-admin.svg" alt="GitHub release">
-  </a>
-  <a href="https://gitter.im/vue-element-admin/discuss">
-    <img src="https://badges.gitter.im/Join%20Chat.svg" alt="gitter">
-  </a>
-  <a href="https://panjiachen.github.io/vue-element-admin-site/donate">
-    <img src="https://img.shields.io/badge/%24-donate-ff69b4.svg" alt="donate">
-  </a>
-</p>
+本项目是一个基于 [vue-element-admin](https://github.com/PanJiaChen/vue-element-admin) 框架构建的数据报表自动化系统。vue-element-admin 是一个基于 Vue.js 和 Element UI 的后台前端解决方案。本项目提供了一个用户友好的界面，用于生成定制化的数据报表。
 
-English | [简体中文](./README.zh-CN.md) | [日本語](./README.ja.md) | [Spanish](./README.es.md)
+## 功能特性
 
-<!-- <p align="center">
-  <b>SPONSORED BY</b>
-</p>
-<table align="center" cellspacing="0" cellpadding="0">
-  <tbody>
-    <tr>
-      <td align="center" valign="middle">
-       <a href="" title="" target="_blank" style="padding-right: 20px;">
-        <img height="200px" style="padding-right: 20px;" src="" title="variantForm">
-        </a>
-      </td>
-    </tr>
-  </tbody> 
-</table>-->
+-   **报表模板上传：** 上传 Excel 模板以定义报表结构和数据源。
+-   **变量上传：** 上传包含变量的 Excel 文件以定制报表内容。
+-   **自动报表生成：** 根据上传的模板和变量自动生成报表。
+-   **报表下载：** 下载生成的 Excel 格式报表。
+-   **进度跟踪：** 监控报表生成进度。
 
-## Introduction
-
-[vue-element-admin](https://panjiachen.github.io/vue-element-admin) is a production-ready front-end solution for admin interfaces. It is based on [vue](https://github.com/vuejs/vue) and uses the UI Toolkit [element-ui](https://github.com/ElemeFE/element).
-
-[vue-element-admin](https://panjiachen.github.io/vue-element-admin) is based on the newest development stack of vue and it has a built-in i18n solution, typical templates for enterprise applications, and lots of awesome features. It helps you build large and complex Single-Page Applications. I believe whatever your needs are, this project will help you.
-
-- [Preview](https://panjiachen.github.io/vue-element-admin)
-
-- [Documentation](https://panjiachen.github.io/vue-element-admin-site/)
-
-- [Gitter](https://gitter.im/vue-element-admin/discuss)
-
-- [Donate](https://panjiachen.github.io/vue-element-admin-site/donate/)
-
-- [Wiki](https://github.com/PanJiaChen/vue-element-admin/wiki)
-
-- [Gitee](https://panjiachen.gitee.io/vue-element-admin/) 国内用户可访问该地址在线预览
-
-- Base template recommends using: [vue-admin-template](https://github.com/PanJiaChen/vue-admin-template)
-- Desktop: [electron-vue-admin](https://github.com/PanJiaChen/electron-vue-admin)
-- Typescript: [vue-typescript-admin-template](https://github.com/Armour/vue-typescript-admin-template) (Credits: [@Armour](https://github.com/Armour))
-- [awesome-project](https://github.com/PanJiaChen/vue-element-admin/issues/2312)
-
-**After the `v4.1.0+` version, the default master branch will not support i18n. Please use [i18n Branch](https://github.com/PanJiaChen/vue-element-admin/tree/i18n), it will keep up with the master update**
-
-**The current version is `v4.0+` build on `vue-cli`. If you find a problem, please put [issue](https://github.com/PanJiaChen/vue-element-admin/issues/new). If you want to use the old version , you can switch branch to [tag/3.11.0](https://github.com/PanJiaChen/vue-element-admin/tree/tag/3.11.0), it does not rely on `vue-cli`**
-
-**This project does not support low version browsers (e.g. IE). Please add polyfill by yourself.**
-
-## Preparation
-
-You need to install [node](https://nodejs.org/) and [git](https://git-scm.com/) locally. The project is based on [ES2015+](https://es6.ruanyifeng.com/), [vue](https://cn.vuejs.org/index.html), [vuex](https://vuex.vuejs.org/zh-cn/), [vue-router](https://router.vuejs.org/zh-cn/), [vue-cli](https://github.com/vuejs/vue-cli) , [axios](https://github.com/axios/axios) and [element-ui](https://github.com/ElemeFE/element), all request data is simulated using [Mock.js](https://github.com/nuysoft/Mock).
-Understanding and learning this knowledge in advance will greatly help the use of this project.
-
-[![Edit on CodeSandbox](https://codesandbox.io/static/img/play-codesandbox.svg)](https://codesandbox.io/s/github/PanJiaChen/vue-element-admin/tree/CodeSandbox)
-
-<p align="center">
-  <img width="900" src="https://wpimg.wallstcn.com/a5894c1b-f6af-456e-82df-1151da0839bf.png">
-</p>
-
-## Sponsors
-
-Become a sponsor and get your logo on our README on GitHub with a link to your site. [[Become a sponsor]](https://www.patreon.com/panjiachen)
-
-### Akveo
-<a href="https://store.akveo.com/products/vue-java-admin-dashboard-spring?utm_campaign=akveo_store-Vue-Vue_demo%2Fgithub&utm_source=vue_admin&utm_medium=referral&utm_content=github_banner"><img width="500px" src="https://raw.githubusercontent.com/PanJiaChen/vue-element-admin-site/master/docs/.vuepress/public/images/vue-java-banner.png" /></a><p>Get Java backend for Vue admin with 20% discount for 39$ use coupon code SWB0RAZPZR1M
-</p>
-
-### Flatlogic
-
-<a href="https://flatlogic.com/admin-dashboards?from=vue-element-admin"><img width="150px" src="https://wpimg.wallstcn.com/9c0b719b-5551-4c1e-b776-63994632d94a.png" /></a><p>Admin Dashboard Templates made with Vue, React and Angular.</p>
-
-## Features
+## 项目结构
 
 ```
-- Login / Logout
-
-- Permission Authentication
-  - Page permission
-  - Directive permission
-  - Permission configuration page
-  - Two-step login
-
-- Multi-environment build
-  - Develop (dev)
-  - sit
-  - Stage Test (stage)
-  - Production (prod)
-
-- Global Features
-  - I18n
-  - Multiple dynamic themes
-  - Dynamic sidebar (supports multi-level routing)
-  - Dynamic breadcrumb
-  - Tags-view (Tab page Support right-click operation)
-  - Svg Sprite
-  - Mock data
-  - Screenfull
-  - Responsive Sidebar
-
-- Editor
-  - Rich Text Editor
-  - Markdown Editor
-  - JSON Editor
-
-- Excel
-  - Export Excel
-  - Upload Excel
-  - Visualization Excel
-  - Export zip
-
-- Table
-  - Dynamic Table
-  - Drag And Drop Table
-  - Inline Edit Table
-
-- Error Page
-  - 401
-  - 404
-
-- Components
-  - Avatar Upload
-  - Back To Top
-  - Drag Dialog
-  - Drag Select
-  - Drag Kanban
-  - Drag List
-  - SplitPane
-  - Dropzone
-  - Sticky
-  - CountTo
-
-- Advanced Example
-- Error Log
-- Dashboard
-- Guide Page
-- ECharts
-- Clipboard
-- Markdown to html
+.
+├── backend/             # 后端 Python 代码 (Flask)
+│   ├── report_generator_v2.py   # 报表生成逻辑
+│   ├── report_task.py          # 报表任务管理
+│   ├── config/                 # 配置文件
+│   └── tools/                  # 实用工具脚本
+├── src/
+│   ├── api/
+│   │   └── report_api.py       # Flask API 端点
+│   ├── assets/                 # 静态资源
+│   ├── components/             # Vue 组件
+│   ├── router/                 # Vue Router 配置
+│   ├── store/                  # Vuex store
+│   ├── styles/                 # 样式表
+│   ├── utils/                  # 实用工具函数
+│   ├── views/                  # Vue 视图
+│   ├── App.vue                 # Vue 主组件
+│   ├── main.js                 # 应用入口点
+│   └── permission.js           # 权限控制
+├── .env                    # 环境变量
+├── package.json            # 项目依赖和脚本
+└── vue.config.js           # Vue CLI 配置
 ```
 
-## Getting started
+## 快速开始
 
-```bash
-# clone the project
-git clone https://github.com/PanJiaChen/vue-element-admin.git
+### 前提条件
 
-# enter the project directory
-cd vue-element-admin
+-   [Node.js](https://nodejs.org/) (>= 8.9) 和 npm (>= 3.0.0)
+-   [Git](https://git-scm.com/)
+-   [Python](https://www.python.org/) (>= 3.6)
+-   数据库 (在 `.env` 中配置)
 
-# install dependency
-npm install
+### 安装
 
-# develop
-npm run dev
+1.  克隆仓库：
+
+    ```bash
+    git clone <repository_url>
+    cd <project_directory>
+    ```
+
+2.  安装前端依赖：
+
+    ```bash
+    npm install
+    ```
+
+3.  安装后端依赖：
+    ```bash
+     pip install -r backend/requirements.txt
+     # 创建 backend/requirements.txt 并添加以下内容：
+     # Flask
+     # Flask-CORS
+     # python-dotenv
+     # pandas
+     # openpyxl
+     # pymysql  # 如果你使用 MySQL
+    ```
+
+### 配置 (.env)
+
+`.env` 文件包含特定于环境的设置。您可能需要根据您的环境创建和修改它。
+
+```
+# 数据库配置
+DB_HOST='your_db_host'
+DB_PORT=3306
+DB_USER='your_db_user'
+DB_PASSWORD='your_db_password'
+DB_DATABASE='your_db_name'
+
+# 邮件配置 (用于发送报表，如果适用)
+SMTP_SERVER='your_smtp_server'
+SMTP_PORT=465
+MAIL_USERNAME='your_email_username'
+MAIL_PASSWORD='your_email_password'
+
+# 后端服务器地址和端口
+VUE_APP_SERVER_ADDRESS=your_server_ip  # 部署的服务器 IP 地址
+VUE_APP_API_PORT=5002
 ```
 
-This will automatically open http://localhost:9527
+### 开发环境
 
-## Build
+1.  启动开发服务器（前端和后端）：
 
-```bash
-# build for test environment
-npm run build:stage
+    ```bash
+    npm run start
+    ```
 
-# build for production environment
-npm run build:prod
-```
+    这将同时启动前端开发服务器（通常在端口 9527 上）和后端 Flask 服务器（在端口 5002 上）。
 
-## Advanced
+2.  在浏览器中访问应用程序：`http://localhost:9527`（或终端中显示的地址）。
 
-```bash
-# preview the release environment effect
-npm run preview
+### 构建和部署
 
-# preview the release environment effect + static resource analysis
-npm run preview -- --report
+1.  构建生产环境的前端：
 
-# code format check
-npm run lint
+    ```bash
+    npm run build:prod
+    ```
 
-# code format check and auto fix
-npm run lint -- --fix
-```
+    这将在 `dist` 目录中创建包含优化后的前端资源的目录。
 
-Refer to [Documentation](https://panjiachen.github.io/vue-element-admin-site/guide/essentials/deploy.html) for more information
+2.  以生产模式启动后端服务器：
+     - 设置环境变量：`FLASK_ENV=production`
+    - 使用 Gunicorn 启动：
+    ```
+    pip install gunicorn
+    gunicorn --bind 0.0.0.0:5002 "src.api.report_api:app"
+    ```
 
-## Changelog
+3.  通过服务器的 IP 地址和端口访问应用程序。
 
-Detailed changes for each release are documented in the [release notes](https://github.com/PanJiaChen/vue-element-admin/releases).
+## 浏览器支持
 
-## Online Demo
-
-[Preview](https://panjiachen.github.io/vue-element-admin)
-
-## Donate
-
-If you find this project useful, you can buy author a glass of juice :tropical_drink:
-
-![donate](https://wpimg.wallstcn.com/bd273f0d-83a0-4ef2-92e1-9ac8ed3746b9.png)
-
-[Paypal Me](https://www.paypal.me/panfree23)
-
-[Buy me a coffee](https://www.buymeacoffee.com/Pan)
-
-## Browsers support
-
-Modern browsers and Internet Explorer 10+.
+现代浏览器和 Internet Explorer 10+。
 
 | [<img src="https://raw.githubusercontent.com/alrra/browser-logos/master/src/edge/edge_48x48.png" alt="IE / Edge" width="24px" height="24px" />](https://godban.github.io/browsers-support-badges/)</br>IE / Edge | [<img src="https://raw.githubusercontent.com/alrra/browser-logos/master/src/firefox/firefox_48x48.png" alt="Firefox" width="24px" height="24px" />](https://godban.github.io/browsers-support-badges/)</br>Firefox | [<img src="https://raw.githubusercontent.com/alrra/browser-logos/master/src/chrome/chrome_48x48.png" alt="Chrome" width="24px" height="24px" />](https://godban.github.io/browsers-support-badges/)</br>Chrome | [<img src="https://raw.githubusercontent.com/alrra/browser-logos/master/src/safari/safari_48x48.png" alt="Safari" width="24px" height="24px" />](https://godban.github.io/browsers-support-badges/)</br>Safari |
 | --------- | --------- | --------- | --------- |
 | IE10, IE11, Edge | last 2 versions | last 2 versions | last 2 versions |
 
-## License
+## 许可证
 
 [MIT](https://github.com/PanJiaChen/vue-element-admin/blob/master/LICENSE)
 
-Copyright (c) 2017-present PanJiaChen
+Copyright (c) 2017-present PanJiaChen (vue-element-admin framework)
