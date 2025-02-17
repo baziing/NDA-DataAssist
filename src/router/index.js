@@ -123,18 +123,6 @@ export const constantRoutes = [
     ]
   },
   {
-    path: '/instructions', // 模块一的路径
-    component: Layout,
-    children: [
-      {
-        path: 'index',
-        component: () => import('@/views/Instructions/index'), // 模块一的组件
-        name: 'Instructions',
-        meta: { title: '使用说明', icon: 'documentation' } // 模块一的标题和图标
-      }
-    ]
-  },
-  {
     path: '/autoReport', // 模块二的路径
     component: Layout,
     redirect: '/autoReport/manual', // 重定向到第一个子页签
