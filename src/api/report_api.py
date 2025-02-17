@@ -23,7 +23,7 @@ from config import OUTPUT_DIR, DB_CONFIG
 from report_task import ReportTask
 
 app = Flask(__name__)
-CORS(app)  # 启用 CORS
+CORS(app)  # 启用 CORS, 允许所有源
 
 # 确保上传目录存在
 UPLOAD_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'tmp'))
