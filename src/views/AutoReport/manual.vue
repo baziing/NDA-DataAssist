@@ -1,7 +1,7 @@
 <template>
   <div class="manual-report-container">
     <div class="header-container">
-      <h1>手动生成报表</h1>
+      <h1 />
       <i class="el-icon-refresh reset-icon" title="重置任务" @click="handleResetTask" />
     </div>
     <el-collapse v-model="activeNames" @change="handleCollapseChange">
@@ -399,7 +399,7 @@ export default {
 
 <style scoped>
 .manual-report-container {
-  padding: 20px;
+  padding: 10px 20px 20px 20px;
   position: relative;
 }
 
@@ -452,13 +452,13 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 15px;
+  margin-bottom: 5px;
 }
 .reset-icon {
     font-size: 20px;
     cursor: pointer;
     color: #f56c6c;
     margin-left: auto;
-    margin-top: 55px; /* 向下偏移 */
+    margin-top: 5px; /* 向下偏移 */
 }
 </style>
