@@ -36,18 +36,21 @@ export default {
       let matched = this.$route.matched.filter(item => item.meta && item.meta.title)
       const first = matched[0]
 
-      if (!this.isDashboard(first)) {
-        matched = [{ path: '/dashboard', meta: { title: 'Dashboard' }}].concat(matched)
+      // 如果当前路由以 /autoReport 开头，则不添加“系统介绍”
+      if (!this.$route.path.startsWith('/autoReport')) {
+        if (!this.isDashboard(first)) {
+          matched = [{ path: '/dashboard', meta: { title: '系统介绍', icon: 'el-icon-s-opportunity' }}].concat(matched)
+        }
       }
 
       this.levelList = matched.filter(item => item.meta && item.meta.title && item.meta.breadcrumb !== false)
     },
     isDashboard(route) {
-      const name = route && route.name
-      if (!name) {
+      const title = route?.meta?.title
+      if (!title) {
         return false
       }
-      return name.trim().toLocaleLowerCase() === 'Dashboard'.toLocaleLowerCase()
+      return title.trim() === '系统介绍'
     },
     pathCompile(path) {
       // To solve this problem https://github.com/PanJiaChen/vue-element-admin/issues/561
