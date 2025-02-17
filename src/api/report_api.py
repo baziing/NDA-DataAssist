@@ -22,7 +22,7 @@ from report_generator_v2 import generate_report
 from config import OUTPUT_DIR, DB_CONFIG
 from report_task import ReportTask
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='../../dist', static_url_path='/')
 CORS(app)  # 启用 CORS, 允许所有源
 
 # 确保上传目录存在
@@ -37,6 +37,10 @@ os.makedirs(TEMPLATES_FOLDER, exist_ok=True)
 os.makedirs(VARIABLES_FOLDER, exist_ok=True)
 
 # 存储任务的字典，key为uuid，value为ReportTask对象
+@app.route('/')
+def index():
+    return app.send_static_file('index.html')
+
 tasks = {}
 
 @app.route('/upload', methods=['POST'])
@@ -205,4 +209,4 @@ def get_markdown():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, port=int(os.environ.get('VUE_APP_API_PORT')))
+    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('VUE_APP_API_PORT')))

@@ -37,5 +37,13 @@ module.exports = {
    * @type {string[]}
    * @description Modules to hide in sidebar. Use route names.
    */
-  hiddenModules: ['Permission', 'Icons', 'ComponentDemo', 'Charts', 'Nested', 'Table', 'Example', 'Tab', 'ErrorPages', 'ErrorLog', 'Excel', 'Zip', 'PDF', 'Theme', 'ClipboardDemo', 'external-link', 'Guide', 'Documentation']
+  hiddenModules: ['Permission', 'Icons', 'ComponentDemo', 'Charts', 'Nested', 'Table', 'Example', 'Tab', 'ErrorPages', 'ErrorLog', 'Excel', 'Zip', 'PDF', 'Theme', 'ClipboardDemo', 'external-link', 'Guide', 'Documentation'],
+
+  /**
+   * @type {string}
+   * @description The address of the backend server.
+   *  - For local development, use 'localhost'.
+   *  - For network access, use the server's IP address or hostname (e.g., '192.168.1.100' or 'my-server.example.com').
+   */
+  serverAddress: process.env.VUE_APP_SERVER_ADDRESS || 'localhost'
 }

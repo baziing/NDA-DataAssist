@@ -82,6 +82,8 @@
 
 <script>
 import { MessageBox } from 'element-ui'
+import settings from '@/settings'
+
 export default {
   name: 'Manual',
   data() {
@@ -139,7 +141,8 @@ export default {
       const formData = new FormData()
       formData.append('file', file.raw)
 
-      fetch(`http://localhost:${process.env.VUE_APP_API_PORT}/upload`, {
+      // 重要提示：如果您希望从同一网络中的其他计算机访问此服务，请将 "localhost" 替换为运行此服务的计算机的 IP 地址或主机名。
+      fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/upload`, {
         method: 'POST',
         body: formData
       })
@@ -183,7 +186,8 @@ export default {
       const formData = new FormData()
       formData.append('file', file.raw)
 
-      fetch(`http://localhost:${process.env.VUE_APP_API_PORT}/upload_vars`, {
+      // 重要提示：如果您希望从同一网络中的其他计算机访问此服务，请将 "localhost" 替换为运行此服务的计算机的 IP 地址或主机名。
+      fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/upload_vars`, {
         method: 'POST',
         body: formData
       })
@@ -234,7 +238,8 @@ export default {
       this.executionLog += '开始执行...\n'
       this.activeNames = ['1', '2', '5', '3', '6']
       // 调用后端 /generate 接口
-      fetch(`http://localhost:${process.env.VUE_APP_API_PORT}/generate`, {
+      // 重要提示：如果您希望从同一网络中的其他计算机访问此服务，请将 "localhost" 替换为运行此服务的计算机的 IP 地址或主机名。
+      fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -258,7 +263,8 @@ export default {
 
           // 使用 setInterval 定期获取进度
           const intervalId = setInterval(() => {
-            fetch(`http://localhost:${process.env.VUE_APP_API_PORT}/progress/${this.taskId}`)
+            // 重要提示：如果您希望从同一网络中的其他计算机访问此服务，请将 "localhost" 替换为运行此服务的计算机的 IP 地址或主机名。
+            fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/progress/${this.taskId}`)
               .then(response => {
                 if (response.ok) {
                   return response.json()
@@ -313,7 +319,8 @@ export default {
       }
 
       // 构造下载链接
-      const downloadUrl = `http://localhost:${process.env.VUE_APP_API_PORT}/download/${this.outputFile}`
+      // 重要提示：如果您希望从同一网络中的其他计算机访问此服务，请将 "localhost" 替换为运行此服务的计算机的 IP 地址或主机名。
+      const downloadUrl = `http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/download/${this.outputFile}`
 
       // 创建一个隐藏的 <a> 元素
       const link = document.createElement('a')
@@ -365,7 +372,8 @@ export default {
         })
         if (this.isExecuting) {
         // 调用后端 API 终止任务
-          fetch(`http://localhost:${process.env.VUE_APP_API_PORT}/reset/${this.taskId}`, {
+          // 重要提示：如果您希望从同一网络中的其他计算机访问此服务，请将 "localhost" 替换为运行此服务的计算机的 IP 地址或主机名。
+          fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/reset/${this.taskId}`, {
             method: 'POST'
           })
             .then(response => {
