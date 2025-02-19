@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify, send_file
-from flask_cors import CORS  # 导入 CORS
+from flask_cors import CORS
 import os
 import sys
 import uuid
@@ -10,20 +10,19 @@ from datetime import datetime
 import pandas as pd
 
 from dotenv import load_dotenv
-from pathlib import Path  # 指定 .env.development 文件的路径
-dotenv_path = Path('.') / '.env.development'  # 指定 .env.development 文件的路径
+from pathlib import Path
+dotenv_path = Path('.') / '.env.development'
 load_dotenv(dotenv_path=dotenv_path)
 
-# 将backend目录添加到Python路径
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'backend')))
 
-# 导入report_generator.py中的函数和config模块
 from report_generator_v2 import generate_report
 from config import OUTPUT_DIR, DB_CONFIG
 from report_task import ReportTask
+from task_scheduler import TaskScheduler  # 导入 TaskScheduler
 
 app = Flask(__name__, static_folder='../../dist', static_url_path='/')
-CORS(app)  # 启用 CORS, 允许所有源
+CORS(app)
 
 # 确保上传目录存在
 UPLOAD_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'tmp'))
@@ -36,12 +35,39 @@ VARIABLES_FOLDER = os.path.join(UPLOAD_FOLDER, 'variables')
 os.makedirs(TEMPLATES_FOLDER, exist_ok=True)
 os.makedirs(VARIABLES_FOLDER, exist_ok=True)
 
-# 存储任务的字典，key为uuid，value为ReportTask对象
+# 创建 TaskScheduler 实例
+task_scheduler = TaskScheduler()
+
 @app.route('/')
 def index():
     return app.send_static_file('index.html')
 
 tasks = {}
+
+@app.route('/create_task', methods=['POST'])
+def create_task():
+    """创建定时任务"""
+    data = request.get_json()
+    # 检查必要参数
+    required_fields = ['filename', 'gameType', 'taskName', 'frequency', 'time']
+    if not all(field in data for field in required_fields):
+        return jsonify({'error': 'Missing required fields'}), 400
+
+    # 提取任务信息
+    task_info = {
+        'filename': data['filename'],
+        'gameType': data['gameType'],
+        'taskName': data['taskName'],
+        'frequency': data['frequency'],
+        'time': data['time'],
+        'dayOfMonth': data.get('dayOfMonth'),  # 可选
+        'dayOfWeek': data.get('dayOfWeek'),   # 可选
+    }
+
+    # 添加任务
+    task_scheduler.add_task(task_info)
+
+    return jsonify({'message': 'Task created successfully'}), 200
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -209,4 +235,9 @@ def get_markdown():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
+    # 创建并启动调度器线程
+    scheduler_thread = threading.Thread(target=task_scheduler.start)
+    scheduler_thread.daemon = True  # 设置为守护线程，以便主线程退出时自动退出
+    scheduler_thread.start()
+
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('VUE_APP_API_PORT')))

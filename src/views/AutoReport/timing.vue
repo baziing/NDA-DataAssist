@@ -18,18 +18,17 @@
               :show-file-list="false"
               accept=".xlsx"
             >
-              <el-button type="primary">上传文件</el-button>
+              <el-button type="primary">选取文件</el-button>
             </el-upload>
             <el-progress :percentage="uploadProgress" :status="uploadProgress === 100 ? 'success' : undefined" style="margin-left: 10px;" />
-            <span v-if="task.filename" style="margin-left: 10px;">{{ task.filename }}</span>
-            <i v-if="task.filename" class="el-icon-delete" style="margin-left: 10px;" @click="handleFileRemove(null, [])" />
-            <span v-else style="margin-left: 10px;">尚未上传文件</span>
+            <span v-if="task.original_filename" style="margin-left: 10px;">{{ task.original_filename }}</span>
           </div>
+          <div class="input-tip">只能上传xlsx文件</div>
         </div>
       </el-form-item>
 
       <el-form-item label="游戏分类">
-        <el-select v-model="task.gameType" placeholder="请选择游戏分类">
+        <el-select v-model="task.gameType" placeholder="请选择游戏分类" style="margin-right: 10px;">
           <el-option label="无归类" value="无归类" />
           <el-option label="风之大陆" value="风之大陆" />
           <el-option label="战神遗迹" value="战神遗迹" />
@@ -95,6 +94,9 @@
 </template>
 
 <script>
+import { Message } from 'element-ui'
+import request from '@/utils/request'
+
 export default {
   name: 'Timing',
   data() {
@@ -102,6 +104,7 @@ export default {
     return {
       task: {
         filename: '',
+        original_filename: '', // 添加 original_filename
         gameType: '',
         taskName: '',
         frequency: '',
@@ -116,29 +119,54 @@ export default {
   methods: {
     handleFileChange(file, fileList) {
       if (fileList.length > 0) {
-        // this.task.filename = fileList[0].name // 移动到定时器内部
-        // 限制文件列表长度为1
         this.fileList = [fileList[0]]
       }
-      // 模拟上传进度
       this.uploadProgress = 0
-      const timer = setInterval(() => {
-        if (this.uploadProgress < 100) {
-          this.uploadProgress += 10
+
+      // 使用 FormData 构建请求体
+      const formData = new FormData()
+      formData.append('file', fileList[0].raw)
+
+      // 使用 Promise 模拟上传
+      new Promise((resolve, reject) => {
+        const timer = setInterval(() => {
+          if (this.uploadProgress < 100) {
+            this.uploadProgress += 10
+          } else {
+            clearInterval(timer)
+            resolve() // 这里不需要传递文件名了
+          }
+        }, 100)
+      }).then(() => {
+        // 上传成功后，发送请求获取文件名
+        return request.post('upload', formData, { // 传递 formData
+          headers: {
+            'Content-Type': 'multipart/form-data' // 这个头可以省略，浏览器会自动设置
+          }
+        })
+      }).then(response => {
+        if (response.filename && response.message) {
+          this.task.filename = response.filename // 存储服务器返回的文件名
+          this.task.original_filename = response.original_filename // 存储原始文件名
+          Message.success(response.message) // 使用后端返回的成功消息
         } else {
-          clearInterval(timer)
-          this.task.filename = fileList[0].name // 在此处更新文件名
+          Message.error('上传失败：' + (response.error || '未知错误')) // 显示错误信息，如果没有 error 字段，则显示“未知错误”
         }
-      }, 100)
+      }).catch(error => {
+        console.error('Upload error:', error)
+        Message.error('上传失败！' + error.message) // 显示错误信息
+      })
     },
     handleFileRemove(file, fileList) {
       this.task.filename = ''
+      this.task.original_filename = ''
       this.fileList = []
       this.uploadProgress = 0
     },
     clearForm() {
       // this.$refs.taskForm.resetFields(); // This line was causing the issue
       this.task.filename = ''
+      this.task.original_filename = ''
       this.task.gameType = ''
       this.task.taskName = ''
       this.task.frequency = ''
@@ -150,29 +178,38 @@ export default {
       this.uploadProgress = 0
     },
     createTask() {
-      // 模拟创建任务
       // 检查必填项
       if (!this.task.filename || !this.task.gameType || !this.task.taskName || !this.task.frequency || !this.task.time) {
-        this.$message.error('请填写所有必填项！')
+        Message.error('请填写所有必填项！')
         return
       }
       // 检查任务名称是否包含空格
       if (this.task.taskName.includes(' ')) {
-        this.$message.error('任务名称不能包含空格！')
+        Message.error('任务名称不能包含空格！')
         return
       }
 
       // 检查月/周/日选项
       if (this.task.frequency === 'month' && !this.task.dayOfMonth) {
-        this.$message.error('请选择月份中的具体日期！')
+        Message.error('请选择月份中的具体日期！')
         return
       }
       if (this.task.frequency === 'week' && !this.task.dayOfWeek) {
-        this.$message.error('请选择星期几！')
+        Message.error('请选择星期几！')
         return
       }
 
-      this.$message.success('任务创建成功！')
+      // 发送创建任务请求
+      request.post('/create_task', this.task)
+        .then(response => {
+          Message.success('任务创建成功！')
+          // 清空表单
+          this.clearForm()
+        })
+        .catch(error => {
+          console.error('Create task error:', error)
+          Message.error('任务创建失败！')
+        })
     }
   }
 }
