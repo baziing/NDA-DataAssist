@@ -4,24 +4,28 @@
 
     <el-form ref="taskForm" :model="task" label-width="120px">
       <el-form-item label="上传文件">
-        <el-upload
-          class="upload-demo"
-          drag
-          action="#"
-          :multiple="false"
-          :limit="1"
-          :on-change="handleFileChange"
-          :on-remove="handleFileRemove"
-          :auto-upload="false"
-          :file-list="fileList"
-          accept=".xlsx"
-        >
-          <i class="el-icon-upload" />
-          <div class="el-upload__text">将文件拖到此处，或<em>点击选取文件</em></div>
-
-        </el-upload>
-        <el-progress v-if="uploadProgress > 0" :percentage="uploadProgress" />
-        <span v-if="task.filename" style="margin-left: 10px;">{{ task.filename }}</span>
+        <div class="progress-item">
+          <div style="display: flex; align-items: center;">
+            <el-upload
+              class="upload-demo"
+              action="#"
+              :multiple="false"
+              :limit="1"
+              :on-change="handleFileChange"
+              :on-remove="handleFileRemove"
+              :auto-upload="false"
+              :file-list="fileList"
+              :show-file-list="false"
+              accept=".xlsx"
+            >
+              <el-button type="primary">上传文件</el-button>
+            </el-upload>
+            <el-progress :percentage="uploadProgress" :status="uploadProgress === 100 ? 'success' : undefined" style="margin-left: 10px;" />
+            <span v-if="task.filename" style="margin-left: 10px;">{{ task.filename }}</span>
+            <i v-if="task.filename" class="el-icon-delete" style="margin-left: 10px;" @click="handleFileRemove(null, [])" />
+            <span v-else style="margin-left: 10px;">尚未上传文件</span>
+          </div>
+        </div>
       </el-form-item>
 
       <el-form-item label="游戏分类">
@@ -112,7 +116,7 @@ export default {
   methods: {
     handleFileChange(file, fileList) {
       if (fileList.length > 0) {
-        this.task.filename = fileList[0].name
+        // this.task.filename = fileList[0].name // 移动到定时器内部
         // 限制文件列表长度为1
         this.fileList = [fileList[0]]
       }
@@ -123,6 +127,7 @@ export default {
           this.uploadProgress += 10
         } else {
           clearInterval(timer)
+          this.task.filename = fileList[0].name // 在此处更新文件名
         }
       }, 100)
     },
