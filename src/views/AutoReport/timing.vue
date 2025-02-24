@@ -250,7 +250,6 @@ export default {
 
       // 检查任务名称是否重名
       this.taskProgress = '正在检测任务名称是否有重名……'
-      // TODO: 检查任务名称是否重名,调用接口
       // 重要提示：如果您希望从同一网络中的其他计算机访问此服务，请将 "localhost" 替换为运行此服务的计算机的 IP 地址或主机名。
       fetch(`http://${serverAddress}:${process.env.VUE_APP_API_PORT}/check_task_name`, {
         method: 'POST',

@@ -25,6 +25,23 @@ from backend.tools.excel_utils import check_excel_file
 app = Flask(__name__, static_folder='../../dist', static_url_path='/')
 CORS(app)
 
+@app.route('/check_task_name', methods=['POST'])
+def check_task_name():
+    """检查任务名称是否重名"""
+    data = request.get_json()
+    game_type = data.get('gameType')
+    task_name = data.get('taskName')
+
+    if not game_type or not task_name:
+        return jsonify({'is_valid': False, 'message': '游戏分类和任务名称不能为空'}), 400
+
+    tasks = task_scheduler.get_tasks()
+    for task in tasks:
+        if task['gameType'] == game_type and task['taskName'] == task_name:
+            return jsonify({'is_valid': False, 'message': '任务名称已存在'}), 200
+
+    return jsonify({'is_valid': True}), 200
+
 # 确保上传目录存在
 UPLOAD_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'tmp'))
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)

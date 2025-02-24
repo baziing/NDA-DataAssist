@@ -22,6 +22,8 @@ selenium-debug.log
 package-lock.json
 yarn.lock
 
+# 忽略
 *.env
 *.xlsx
 *.pyc
+backend/tasks.json

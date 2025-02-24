@@ -185,11 +185,15 @@ def create_task_api():
         return jsonify({"message": f"An error occurred: {str(e)}"}), 500
 
 class TaskScheduler:
-    def __init__(self, tasks_file='tasks.json'):
+    def __init__(self, tasks_file='backend/tasks.json'):
         self.tasks = []
         self.tasks_file = tasks_file
         self.scheduler = schedule.Scheduler()
         self.stop_event = threading.Event()  # 用于停止调度线程的事件
+
+    def get_tasks(self):
+        """获取所有任务的副本"""
+        return self.tasks.copy()
 
     def add_task(self, task_info):
         """添加任务"""
