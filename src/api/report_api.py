@@ -21,9 +21,42 @@ from backend.config import OUTPUT_DIR, DB_CONFIG
 from backend.report_task import ReportTask
 from backend.task_scheduler import TaskScheduler  # 导入 TaskScheduler
 from backend.tools.excel_utils import check_excel_file
+import sqlparse
 
 app = Flask(__name__, static_folder='../../dist', static_url_path='/')
 CORS(app)
+
+@app.route('/check_sql', methods=['POST'])
+def check_sql():
+    """检查 SQL 语句的有效性"""
+    data = request.get_json()
+    filename = data.get('filename')
+
+    if not filename:
+        return jsonify({'is_valid': False, 'message': '未提供文件名'}), 400
+
+    # 文件上传路径
+    file_path = os.path.join(TEMPLATES_FOLDER, filename)
+    # 检查文件是否存在
+    if not os.path.exists(file_path):
+        return jsonify({'is_valid': False, 'message': '文件不存在'}), 400
+    # 从 Excel 文件中读取 SQL 语句
+    try:
+        excel_result = check_excel_file(file_path)
+        if not excel_result['is_valid']:
+            return jsonify({"is_valid": False, "message": f"读取 Excel 文件失败: {excel_result['message']}"}), 400
+        sql_list = excel_result['sql_list']
+    except Exception as e:
+        return jsonify({"is_valid": False, "message": f"读取 Excel 文件失败: {str(e)}"}), 400
+
+    # 验证 SQL 语句的有效性
+    for sql in sql_list:
+        try:
+            sqlparse.parse(sql)
+        except Exception as e:
+            return jsonify({"is_valid": False, "message": f"SQL 语句无效: {str(e)}"}), 400
+
+    return jsonify({'is_valid': True}), 200
 
 @app.route('/check_task_name', methods=['POST'])
 def check_task_name():
@@ -99,6 +132,7 @@ def upload_file():
         filename = str(uuid.uuid4()) + '.xlsx'
         filepath = os.path.join(TEMPLATES_FOLDER, filename)
         file.save(filepath)
+        print(f"File saved to: {filepath}") # 打印文件保存路径
 
         # 检查模板文件格式
         try:

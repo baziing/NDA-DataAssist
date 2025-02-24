@@ -226,28 +226,25 @@ class TaskScheduler:
         if task_info['frequency'] == 'day':
             job = self.scheduler.every().day
         elif task_info['frequency'] == 'week':
-            job = self.scheduler.every().week
             if task_info['dayOfWeek']:
                 # schedule库的周几从0开始，0=周一，1=周二，...，6=周日
                 weekday_map = {
-                    1: schedule.monday,
-                    2: schedule.tuesday,
-                    3: schedule.wednesday,
-                    4: schedule.thursday,
-                    5: schedule.friday,
-                    6: schedule.saturday,
-                    7: schedule.sunday,
+                    1: 'monday',
+                    2: 'tuesday',
+                    3: 'wednesday',
+                    4: 'thursday',
+                    5: 'friday',
+                    6: 'saturday',
+                    7: 'sunday',
                 }
                 day_of_week = weekday_map.get(int(task_info['dayOfWeek']))
                 if day_of_week:
-                    job = job.at(task_info['time']).on(day_of_week)
+                    job = getattr(self.scheduler.every(), day_of_week).at(task_info['time'])
         elif task_info['frequency'] == 'month':
-            job = self.scheduler.every().month
             if task_info['dayOfMonth']:
-                job = job.at(task_info['time']).day(int(task_info['dayOfMonth']))
-
+                job = self.scheduler.every(int(task_info['dayOfMonth'])).days.at(task_info['time'])
         if job is not None:
-          job.at(task_info['time']).do(self.run_task, task_info)
+            job.do(self.run_task, task_info)
 
     def run_task(self, task_info):
         """运行任务"""

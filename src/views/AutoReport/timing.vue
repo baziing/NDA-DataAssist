@@ -104,7 +104,6 @@
 </template>
 
 <script>
-import * as XLSX from 'xlsx'
 import settings from '@/settings'
 const { serverAddress } = settings
 export default {
@@ -114,6 +113,7 @@ export default {
     return {
       task: {
         filename: '',
+        uuidFileName: '', // 用于存储后端返回的 UUID 文件名
         gameType: '',
         taskName: '',
         frequency: '',
@@ -128,73 +128,70 @@ export default {
     }
   },
   methods: {
+    getFormattedTimestamp() {
+      const now = new Date()
+      const year = now.getFullYear()
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+      const day = String(now.getDate()).padStart(2, '0')
+      const hours = String(now.getHours()).padStart(2, '0')
+      const minutes = String(now.getMinutes()).padStart(2, '0')
+      const seconds = String(now.getSeconds()).padStart(2, '0')
+
+      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+    },
     handleFileChange(file, fileList) {
       this.uploadProgress = 0
       this.uploadStatus = null
       this.fileList = fileList
       console.log('file:', file)
       console.log('fileList:', fileList)
+
       // 检查文件类型
       if (file && !file.raw.name.endsWith('.xlsx')) {
-        this.uploadStatus = 'exception'
         this.$message.error('请上传 .xlsx 格式的模板文件')
-        this.taskProgress = '请上传 .xlsx 格式的模板文件'
         this.task.filename = ''
         return // 提前返回，阻止后续操作
       }
 
+      // 如果file为空
       if (!file) {
         this.task.filename = ''
         this.taskProgress = ''
         return
       }
 
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        try {
-          const workbook = XLSX.read(e.target.result, { type: 'binary' })
-          const sheetName = workbook.SheetNames[0]
-          const worksheet = workbook.Sheets[sheetName]
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
+      // 使用 FormData 对象上传文件
+      const formData = new FormData()
+      formData.append('file', file.raw)
 
-          // 检查文件内容是否包含 db_name 和 output_sql 字段
-          let db_name_index = -1
-          let output_sql_index = -1
-
-          // 检查第一行（表头）是否包含 db_name 和 output_sql
-          for (let i = 0; i < jsonData[0].length; i++) {
-            if (typeof jsonData[0][i] === 'string') {
-              if (jsonData[0][i].toLowerCase() === 'db_name') {
-                db_name_index = i
-              } else if (jsonData[0][i].toLowerCase() === 'output_sql') {
-                output_sql_index = i
-              }
-            }
+      fetch(`http://${serverAddress}:${process.env.VUE_APP_API_PORT}/upload`, {
+        method: 'POST',
+        body: formData
+      })
+        .then(response => {
+          if (response.ok) {
+            return response.json()
+          } else {
+            return response.json().then(data => {
+              throw new Error(data.message || '文件上传失败')
+            })
           }
-
-          if (db_name_index === -1 || output_sql_index === -1) {
-            this.uploadStatus = 'exception'
-            this.taskProgress = '文件内容校验失败: 缺少 db_name 或 output_sql 字段'
-            this.$message.error('文件内容校验失败: 缺少 db_name 或 output_sql 字段')
-            this.uploadProgress = 0 // 重置进度条
-            this.task.filename = ''
-            return
-          }
-
+        })
+        .then(data => {
+          this.$message.success(data.message || '文件上传成功！')
+          this.task.filename = data.original_filename // 使用原始文件名
+          this.task.uuidFileName = data.filename // 保存后端返回的 UUID 文件名
           this.uploadProgress = 100
           this.uploadStatus = 'success'
-          this.task.filename = file.name
-          this.taskProgress = '文件校验成功'
-        } catch (e) {
-          console.error(e)
+          this.taskProgress = `${this.getFormattedTimestamp()} - 文件上传成功`
+        })
+        .catch(error => {
+          this.$message.error(error.message)
+          this.taskProgress = `${this.getFormattedTimestamp()} - 文件上传失败: ${error.message}`
           this.uploadStatus = 'exception'
-          this.taskProgress = `文件内容校验失败: ${e.message || '文件格式不正确'}`
-          this.$message.error(`文件内容校验失败: ${e.message || '文件格式不正确'}`)
           this.uploadProgress = 0 // 重置进度条
           this.task.filename = ''
-        }
-      }
-      reader.readAsBinaryString(file.raw)
+        })
     },
     handleFileRemove(file, fileList) {
       console.log('handleFileRemove - file:', file)
@@ -209,6 +206,7 @@ export default {
     clearForm() {
       // this.$refs.taskForm.resetFields(); // This line was causing the issue
       this.task.filename = ''
+      this.task.uuidFileName = ''
       this.task.gameType = ''
       this.task.taskName = ''
       this.task.frequency = ''
@@ -218,38 +216,39 @@ export default {
       this.task.time = ''
       this.fileList = []
       this.uploadProgress = 0
-      this.taskProgress = ''
+      this.uploadStatus = null
+      // this.taskProgress = ''
     },
     createTask() {
       // 模拟创建任务
-      this.taskProgress = '正在检测是否有未填写内容……'
+      this.taskProgress += `${this.getFormattedTimestamp()} - 正在检测是否有未填写内容……\n`
       // 检查必填项
       if (!this.task.filename || !this.task.gameType || !this.task.taskName || !this.task.frequency || !this.task.time) {
         this.$message.error('请填写所有必填项！')
-        this.taskProgress = '请填写所有必填项！'
+        this.taskProgress += `${this.getFormattedTimestamp()} - 请填写所有必填项！\n`
         return
       }
       // 检查任务名称是否包含空格
       if (this.task.taskName.includes(' ')) {
         this.$message.error('任务名称不能包含空格！')
-        this.taskProgress = '任务名称不能包含空格！'
+        this.taskProgress += `${this.getFormattedTimestamp()} - 任务名称不能包含空格！\n`
         return
       }
 
       // 检查月/周/日选项
       if (this.task.frequency === 'month' && !this.task.dayOfMonth) {
         this.$message.error('请选择月份中的具体日期！')
-        this.taskProgress = '请选择月份中的具体日期！'
+        this.taskProgress += `${this.getFormattedTimestamp()} - 请选择月份中的具体日期！\n`
         return
       }
       if (this.task.frequency === 'week' && !this.task.dayOfWeek) {
         this.$message.error('请选择星期几！')
-        this.taskProgress = '请填写所有必填项！'
+        this.taskProgress += `${this.getFormattedTimestamp()} - 请填写所有必填项！\n`
         return
       }
 
       // 检查任务名称是否重名
-      this.taskProgress = '正在检测任务名称是否有重名……'
+      this.taskProgress += `${this.getFormattedTimestamp()} - 正在检测任务名称是否有重名……\n`
       // 重要提示：如果您希望从同一网络中的其他计算机访问此服务，请将 "localhost" 替换为运行此服务的计算机的 IP 地址或主机名。
       fetch(`http://${serverAddress}:${process.env.VUE_APP_API_PORT}/check_task_name`, {
         method: 'POST',
@@ -273,12 +272,46 @@ export default {
         .then(data => {
           if (!data.is_valid) {
             this.$message.error(data.message)
-            this.taskProgress = `任务名称校验失败: ${data.message}`
-            return // 提前返回，阻止后续操作
+            this.taskProgress += `${this.getFormattedTimestamp()} - 任务名称校验失败: ${data.message}\n`
+            return
           }
 
+          // 在这里添加 SQL 校验逻辑
+          this.taskProgress += `${this.getFormattedTimestamp()} - 正在校验sql……\n`
+          // 调用后端 API 校验 SQL
+          fetch(`http://${serverAddress}:${process.env.VUE_APP_API_PORT}/check_sql`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              filename: this.task.uuidFileName // 使用后端返回的 UUID 文件名
+            })
+          })
+            .then(response => {
+              if (response.ok) {
+                return response.json()
+              } else {
+                return response.json().then(data => {
+                  throw new Error(data.message || 'SQL 校验失败')
+                })
+              }
+            })
+            .then(data => {
+              if (!data.is_valid) {
+                this.$message.error(data.message)
+                this.taskProgress += `${this.getFormattedTimestamp()} - SQL 校验失败: ${data.message}\n`
+                return
+              }
+            })
+            .catch(error => {
+              this.$message.error(error.message)
+              this.taskProgress += `${this.getFormattedTimestamp()} - SQL校验失败\n`
+              return
+            })
+
           // 正在创建任务
-          this.taskProgress = '正在创建任务……'
+          this.taskProgress += `${this.getFormattedTimestamp()} - 正在创建任务……\n`
           // TODO: 调用后端 API 创建任务
           fetch(`http://${serverAddress}:${process.env.VUE_APP_API_PORT}/create_task`, {
             method: 'POST',
@@ -298,18 +331,18 @@ export default {
             })
             .then(data => {
               this.$message.success(data.message || '任务创建成功！')
-              this.taskProgress = '创建成功。'
+              this.taskProgress += `${this.getFormattedTimestamp()} - 创建成功。\n`
               // 清空表单
               this.clearForm()
             })
             .catch(error => {
               this.$message.error(error.message)
-              this.taskProgress = `创建任务失败: ${error.message}`
+              this.taskProgress += `${this.getFormattedTimestamp()} - 创建任务失败: ${error.message}\n`
             })
         })
         .catch(error => {
           this.$message.error(error.message)
-          this.taskProgress = `任务名称校验失败: ${error.message}`
+          this.taskProgress += `${this.getFormattedTimestamp()} - 任务名称校验失败: ${error.message}\n`
         })
     }
   }
