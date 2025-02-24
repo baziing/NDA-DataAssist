@@ -1,7 +1,8 @@
-from flask import Flask, request, jsonify, send_file
-from flask_cors import CORS
 import os
 import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
 import uuid
 import threading
 import time
@@ -14,12 +15,12 @@ from pathlib import Path
 dotenv_path = Path('.') / '.env.development'
 load_dotenv(dotenv_path=dotenv_path)
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'backend')))
-
-from report_generator_v2 import generate_report
-from config import OUTPUT_DIR, DB_CONFIG
-from report_task import ReportTask
-from task_scheduler import TaskScheduler  # 导入 TaskScheduler
+from backend import report_generator_v2
+generate_report = report_generator_v2.generate_report
+from backend.config import OUTPUT_DIR, DB_CONFIG
+from backend.report_task import ReportTask
+from backend.task_scheduler import TaskScheduler  # 导入 TaskScheduler
+from backend.tools.excel_utils import check_excel_file
 
 app = Flask(__name__, static_folder='../../dist', static_url_path='/')
 CORS(app)
@@ -141,7 +142,7 @@ def get_progress(task_id):
 @app.route('/download/<path:filename>', methods=['GET'])
 def download_file(filename):
     # 尝试直接使用传入的文件名（包含日期目录）
-    file_path = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')), filename)
+    file_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), filename)
     if not os.path.exists(file_path):
       return jsonify({'error': 'File not found'}), 404
 
@@ -224,6 +225,34 @@ def upload_vars():
     else:
         return jsonify({'error': 'Invalid file type'}), 400
 
+@app.route('/check_excel_file', methods=['POST'])
+def check_excel_file_api():
+    """
+    接收前端传递的文件，并调用 check_excel_file 函数进行文件校验。
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({"is_valid": False, "message": "No file part"}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"is_valid": False, "message": "No selected file"}), 400
+
+        # 将文件保存到临时位置
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        file.save(file_path)
+
+        # 调用 check_excel_file 函数进行校验
+        result = check_excel_file(file_path)
+
+        # 删除临时文件
+        os.remove(file_path)
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        return jsonify({"is_valid": False, "message": f"An error occurred: {str(e)}"}), 500
 
 @app.route('/markdown', methods=['GET'])
 def get_markdown():

@@ -4,7 +4,7 @@ import threading
 import time
 import logging
 from datetime import datetime
-from report_generator_v2 import generate_report
+from .report_generator_v2 import generate_report
 
 # 配置日志
 log_dir = 'logs'

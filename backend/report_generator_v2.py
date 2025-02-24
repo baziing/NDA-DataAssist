@@ -1,11 +1,11 @@
 import pandas as pd
 from openpyxl.styles import Font, Border, Side, PatternFill, Protection, Alignment
 from openpyxl import Workbook
-from utils import connect_db, connect_db_with_config, execute_query, ensure_dir_exists
-from config import DB_CONFIG
-from config import OUTPUT_DIR, INPUT_DIR
-from config.mail_config import get_mail_config, replace_date_variables
-from tools.mail.email_sender import EmailSender
+from .utils import connect_db, connect_db_with_config, execute_query, ensure_dir_exists
+from .config import DB_CONFIG
+from .config import OUTPUT_DIR, INPUT_DIR
+from .config.mail_config import get_mail_config, replace_date_variables
+from .tools.mail.email_sender import EmailSender
 import os
 import time
 import logging

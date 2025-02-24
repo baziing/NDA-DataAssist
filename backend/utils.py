@@ -2,7 +2,7 @@ import logging
 import os
 import mysql.connector
 from mysql.connector import Error
-from config import DB_CONFIG, LOG_CONFIG
+from backend.config import DB_CONFIG, LOG_CONFIG
 
 def setup_logging():
     """

@@ -19,7 +19,7 @@
             >
               <el-button type="primary">上传文件</el-button>
             </el-upload>
-            <el-progress :percentage="uploadProgress" :status="uploadProgress === 100 ? 'success' : undefined" style="margin-left: 10px;" />
+            <el-progress :percentage="uploadProgress" :status="uploadStatus" style="margin-left: 10px;" />
             <span v-if="task.filename" style="margin-left: 10px;">{{ task.filename }}</span>
             <i v-if="task.filename" class="el-icon-delete" style="margin-left: 10px;" @click="handleFileRemove(null, [])" />
             <span v-else style="margin-left: 10px;">尚未上传文件</span>
@@ -89,12 +89,24 @@
         <el-button type="danger" @click="clearForm">清空配置</el-button>
         <el-button type="primary" @click="createTask">创建任务</el-button>
       </el-form-item>
+
+      <el-form-item label="任务进度">
+        <el-input
+          v-model="taskProgress"
+          type="textarea"
+          :rows="4"
+          placeholder="任务进度信息"
+          readonly
+        />
+      </el-form-item>
     </el-form>
   </div>
 </template>
 
 <script>
+import * as XLSX from 'xlsx'
 import settings from '@/settings'
+const { serverAddress } = settings
 export default {
   name: 'Timing',
   data() {
@@ -111,7 +123,8 @@ export default {
       },
       fileList: [],
       uploadProgress: 0,
-      uploadStatus: null
+      uploadStatus: null,
+      taskProgress: ''
     }
   },
   methods: {
@@ -125,52 +138,72 @@ export default {
       if (file && !file.raw.name.endsWith('.xlsx')) {
         this.uploadStatus = 'exception'
         this.$message.error('请上传 .xlsx 格式的模板文件')
+        this.taskProgress = '请上传 .xlsx 格式的模板文件'
+        this.task.filename = ''
         return // 提前返回，阻止后续操作
       }
 
       if (!file) {
         this.task.filename = ''
+        this.taskProgress = ''
         return
       }
 
-      const formData = new FormData()
-      formData.append('file', file.raw)
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        try {
+          const workbook = XLSX.read(e.target.result, { type: 'binary' })
+          const sheetName = workbook.SheetNames[0]
+          const worksheet = workbook.Sheets[sheetName]
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
 
-      console.log('formData:', formData)
-      // 重要提示：如果您希望从同一网络中的其他计算机访问此服务，请将 "localhost" 替换为运行此服务的计算机的 IP 地址或主机名。
-      fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/upload`, {
-        method: 'POST',
-        body: formData
-      })
-        .then(response => {
-          if (response.ok) {
-            return response.json()
-          } else {
-            return response.json().then(data => {
-              throw new Error(data.error || '模板文件上传失败')
-            })
+          // 检查文件内容是否包含 db_name 和 output_sql 字段
+          let db_name_index = -1
+          let output_sql_index = -1
+
+          // 检查第一行（表头）是否包含 db_name 和 output_sql
+          for (let i = 0; i < jsonData[0].length; i++) {
+            if (typeof jsonData[0][i] === 'string') {
+              if (jsonData[0][i].toLowerCase() === 'db_name') {
+                db_name_index = i
+              } else if (jsonData[0][i].toLowerCase() === 'output_sql') {
+                output_sql_index = i
+              }
+            }
           }
-        })
-        .then(data => {
+
+          if (db_name_index === -1 || output_sql_index === -1) {
+            this.uploadStatus = 'exception'
+            this.taskProgress = '文件内容校验失败: 缺少 db_name 或 output_sql 字段'
+            this.$message.error('文件内容校验失败: 缺少 db_name 或 output_sql 字段')
+            this.uploadProgress = 0 // 重置进度条
+            this.task.filename = ''
+            return
+          }
+
           this.uploadProgress = 100
           this.uploadStatus = 'success'
-          this.task.filename = data.original_filename // 更新文件名
-          console.log('uploadProgress:', this.uploadProgress)
-          console.log('task.filename:', this.task.filename)
-        })
-        .catch(error => {
-          console.error('Error:', error)
+          this.task.filename = file.name
+          this.taskProgress = '文件校验成功'
+        } catch (e) {
+          console.error(e)
           this.uploadStatus = 'exception'
-          this.$message.error(error.message)
+          this.taskProgress = `文件内容校验失败: ${e.message || '文件格式不正确'}`
+          this.$message.error(`文件内容校验失败: ${e.message || '文件格式不正确'}`)
           this.uploadProgress = 0 // 重置进度条
-        })
+          this.task.filename = ''
+        }
+      }
+      reader.readAsBinaryString(file.raw)
     },
     handleFileRemove(file, fileList) {
       console.log('handleFileRemove - file:', file)
       console.log('handleFileRemove - fileList:', fileList)
+      this.taskProgress = ''
       this.task.filename = ''
       this.fileList = []
       this.uploadProgress = 0
+      this.uploadStatus = null
       console.log('handleFileRemove - task.filename:', this.task.filename)
     },
     clearForm() {
@@ -185,31 +218,100 @@ export default {
       this.task.time = ''
       this.fileList = []
       this.uploadProgress = 0
+      this.taskProgress = ''
     },
     createTask() {
       // 模拟创建任务
+      this.taskProgress = '正在检测是否有未填写内容……'
       // 检查必填项
       if (!this.task.filename || !this.task.gameType || !this.task.taskName || !this.task.frequency || !this.task.time) {
         this.$message.error('请填写所有必填项！')
+        this.taskProgress = '请填写所有必填项！'
         return
       }
       // 检查任务名称是否包含空格
       if (this.task.taskName.includes(' ')) {
         this.$message.error('任务名称不能包含空格！')
+        this.taskProgress = '任务名称不能包含空格！'
         return
       }
 
       // 检查月/周/日选项
       if (this.task.frequency === 'month' && !this.task.dayOfMonth) {
         this.$message.error('请选择月份中的具体日期！')
+        this.taskProgress = '请选择月份中的具体日期！'
         return
       }
       if (this.task.frequency === 'week' && !this.task.dayOfWeek) {
         this.$message.error('请选择星期几！')
+        this.taskProgress = '请填写所有必填项！'
         return
       }
 
-      this.$message.success('任务创建成功！')
+      // 检查任务名称是否重名
+      this.taskProgress = '正在检测任务名称是否有重名……'
+      // TODO: 检查任务名称是否重名,调用接口
+      // 重要提示：如果您希望从同一网络中的其他计算机访问此服务，请将 "localhost" 替换为运行此服务的计算机的 IP 地址或主机名。
+      fetch(`http://${serverAddress}:${process.env.VUE_APP_API_PORT}/check_task_name`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          gameType: this.task.gameType,
+          taskName: this.task.taskName
+        })
+      })
+        .then(response => {
+          if (response.ok) {
+            return response.json()
+          } else {
+            return response.json().then(data => {
+              throw new Error(data.message || '任务名称校验失败')
+            })
+          }
+        })
+        .then(data => {
+          if (!data.is_valid) {
+            this.$message.error(data.message)
+            this.taskProgress = `任务名称校验失败: ${data.message}`
+            return // 提前返回，阻止后续操作
+          }
+
+          // 正在创建任务
+          this.taskProgress = '正在创建任务……'
+          // TODO: 调用后端 API 创建任务
+          fetch(`http://${serverAddress}:${process.env.VUE_APP_API_PORT}/create_task`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(this.task)
+          })
+            .then(response => {
+              if (response.ok) {
+                return response.json()
+              } else {
+                return response.json().then(data => {
+                  throw new Error(data.message || '创建任务失败')
+                })
+              }
+            })
+            .then(data => {
+              this.$message.success(data.message || '任务创建成功！')
+              this.taskProgress = '创建成功。'
+              // 清空表单
+              this.clearForm()
+            })
+            .catch(error => {
+              this.$message.error(error.message)
+              this.taskProgress = `创建任务失败: ${error.message}`
+            })
+        })
+        .catch(error => {
+          this.$message.error(error.message)
+          this.taskProgress = `任务名称校验失败: ${error.message}`
+        })
     }
   }
 }
