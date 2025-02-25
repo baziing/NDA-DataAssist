@@ -302,8 +302,9 @@ def get_progress(task_id):
 
 @app.route('/download/<path:filename>', methods=['GET'])
 def download_file(filename):
-    # 尝试直接使用传入的文件名（包含日期目录）
-    file_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), filename)
+    # 使用传入的文件名（包含日期目录），output作为根目录
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    file_path = os.path.join(project_root, 'output', filename)
     if not os.path.exists(file_path):
       return jsonify({'error': 'File not found'}), 404
 

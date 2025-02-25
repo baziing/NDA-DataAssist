@@ -29,21 +29,26 @@ def cleanup_old_files(directory, days=7):
                 except Exception as e:
                     logging.error(f'删除文件失败: {filename}, 错误: {e}')
 
-def generate_report(input_file, task, variables_filename=None, output_file=None):
+def generate_report(task, data_frame=None, input_file=None, variables_filename=None, output_file=None):
     """
     生成报表
     """
     try:
+        # 优先使用 data_frame，如果没有，再尝试从 input_file 读取
+        if data_frame is None:
+            if input_file is None:
+                raise ValueError("必须提供 data_frame 或 input_file")
+            # 读取输入文件
+            input_path = input_file
+            df = pd.read_excel(input_path)
+            task.update_progress({'progress': 5, 'log': '读取输入文件'})
+        else:
+            df = data_frame
         # 获取当前日期作为目录
         date_str = datetime.now().strftime('%Y%m%d')
         # 创建日期目录
         output_subdir = os.path.join('output', 'report-manual', date_str)
         ensure_dir_exists(output_subdir)
-
-        # 读取输入文件
-        input_path = input_file
-        df = pd.read_excel(input_path)
-        task.update_progress({'progress': 5, 'log': '读取输入文件'})
 
         # 读取变量文件（如果存在）
         variables = {}
@@ -430,8 +435,7 @@ def generate_report(input_file, task, variables_filename=None, output_file=None)
     
         # 保存文件
         output_path = os.path.join(output_subdir, output_file)
-        # 调试：打印 output_path
-        print(f"output_path: {output_path}")
+        logging.info(f'报表生成路径: {os.path.abspath(output_path)}') # 打印绝对路径
         wb.save(output_path)
         task.update_progress({'progress':100, 'log':'保存文件'}) # 保存文件后：更新 100%
         logging.info(f'报表生成成功: {output_path}')

@@ -32,7 +32,7 @@ INPUT_DIR = {
 }
 
 OUTPUT_DIR = {
-    'report': 'output_files',
+    'report': 'output',
     'format': 'tools/format/output'
 }
 

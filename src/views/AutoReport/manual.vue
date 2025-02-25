@@ -320,7 +320,7 @@ export default {
 
       // 构造下载链接
       // 重要提示：如果您希望从同一网络中的其他计算机访问此服务，请将 "localhost" 替换为运行此服务的计算机的 IP 地址或主机名。
-      const downloadUrl = `http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/download/${this.outputFile}`
+      const downloadUrl = `http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/download/${this.outputFile.replace('output/', '')}`
 
       // 创建一个隐藏的 <a> 元素
       const link = document.createElement('a')

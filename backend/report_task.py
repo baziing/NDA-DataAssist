@@ -45,7 +45,7 @@ class ReportTask:
             # 模拟执行过程，实际情况需要根据process_single_file的实现来更新进度,这里设置几个关键节点来更新
             logging.info(f'开始处理文件: {self.input_file}')
             self.logs.append(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - 开始处理文件: {self.original_filename}')
-            self.output_file = generate_report(self.input_file, self, self.variables_filename)
+            self.output_file = generate_report(self, input_file=self.input_file, variables_filename=self.variables_filename)
             self.status['status'] = 'success'
             self.output_file_size = os.path.getsize(self.output_file)  # 获取文件大小
             logging.info(f'文件处理成功')

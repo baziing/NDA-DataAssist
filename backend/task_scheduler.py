@@ -4,6 +4,7 @@ import threading
 import json
 import os
 import sys  # 导入 sys 模块
+import pandas as pd
 # import mysql.connector # 不需要直接导入
 from datetime import datetime
 from flask import Flask, request, jsonify
@@ -286,10 +287,68 @@ class TaskScheduler:
         """运行任务"""
         try:
             logging.info(f"开始执行任务: {task_info['taskName']}")
-            # 这里调用 report_generator_v2.py 中的 generate_report 函数
-            # generate_report(task_info['filename'], task_info['variables_filename'])
-            # 实际调用时，需要根据 generate_report 的具体参数进行调整
-            logging.info(f"任务 {task_info['taskName']} 执行完成")
+
+            # 1. 参数准备
+            task_id = task_info['id']
+            cursor = None
+            try:
+                if self.connection is None or not self.connection.is_connected():
+                    self.connection = connect_db()
+                cursor = self.connection.cursor(dictionary=True)
+
+                # 查询 autoreport_tasks 表
+                cursor.execute("SELECT * FROM autoreport_tasks WHERE id = %s", (task_id,))
+                task_data = cursor.fetchone()
+                if not task_data:
+                    raise Exception(f"找不到任务 ID: {task_id}")
+
+                game_type = task_data['gameType']
+                task_name = task_data['taskName']
+
+                # 查询 autoreport_templates 表
+                cursor.execute("SELECT * FROM autoreport_templates WHERE task_id = %s ORDER BY sql_order", (task_id,))
+                templates = cursor.fetchall()
+                if not templates:
+                    raise Exception(f"任务 ID: {task_id} 没有找到对应的 SQL 模板")
+
+            except Exception as e:
+                logging.error(f"数据库查询失败: {e}")
+                raise
+            finally:
+                if cursor:
+                    cursor.close()
+
+            # 2. 数据筛选与排序 (在此场景中，已经在数据库查询时完成)
+
+            # 3. 报表生成
+            # 创建一个 DataFrame，包含 db_name, output_sql, format, transpose(Y/N), pos
+            data = []
+            for template in templates:
+                data.append({
+                    'db_name': template['db_name'],
+                    'output_sql': template['output_sql'].replace('\n', ' '),
+                    'format': template.get('format', ''),  # 如果没有 format 字段，则为空字符串
+                    'transpose(Y/N)': 'Y' if template.get('transpose') else 'N',  # 如果没有 transpose 字段，则为 'N'
+                    'pos': template.get('pos', '')  # 如果没有 pos 字段，则为空字符串
+                })
+            df = pd.DataFrame(data)
+
+            # 创建一个模拟的task对象
+            class MockTask:
+                def __init__(self):
+                    self.cancelled = False
+                    self.progress_data = {'progress': 0, 'log': ''}
+
+                def update_progress(self, data):
+                    self.progress_data = data
+                    logging.info(f"Task Progress: {data['progress']}%, Log: {data['log']}")
+
+            task = MockTask()
+            # 调用 generate_report 函数
+            output_path = generate_report(task, data_frame=df, variables_filename=None)
+
+            logging.info(f"任务 {task_info['taskName']} 执行完成，报表已生成: {output_path}")
+
         except Exception as e:
             logging.error(f"任务 {task_info['taskName']} 执行失败: {e}")
 
