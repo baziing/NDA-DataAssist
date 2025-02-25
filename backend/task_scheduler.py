@@ -279,7 +279,12 @@ class TaskScheduler:
                     job = getattr(self.scheduler.every(), day_of_week).at(task_info['time'])
         elif task_info['frequency'] == 'month':
             if task_info['dayOfMonth']:
-                job = self.scheduler.every(int(task_info['dayOfMonth'])).days.at(task_info['time'])
+                # job = self.scheduler.every(int(task_info['dayOfMonth'])).days.at(task_info['time'])
+                if 1 <= int(task_info['dayOfMonth']) <= 31:
+                    job = self.scheduler.every().days.at(task_info['time'])
+                else:
+                    logging.error(f"Invalid dayOfMonth: {task_info['dayOfMonth']}")
+                    job = None  # 或者抛出异常，取决于你希望如何处理无效的日期
         if job is not None:
             job.do(self.run_task, task_info)
 
