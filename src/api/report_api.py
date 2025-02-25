@@ -284,7 +284,7 @@ def generate_report_route():
     task = ReportTask(filepath, original_filename, variables_filename)  # 传递 original_filename
     tasks[task_id] = task
     task.start()
-    return jsonify({'message': 'Report generation started', 'task_id': task_id}), 200
+    return jsonify({'message': 'Report generation started', 'task_id': task_id, 'original_filename': original_filename}), 200
 
 @app.route('/progress/<task_id>', methods=['GET'])
 def get_progress(task_id):

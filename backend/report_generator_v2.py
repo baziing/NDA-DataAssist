@@ -427,7 +427,7 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
         # 根据是否传入 input_file 确定文件名
         if input_file:
             # 手动生成，使用原始文件名
-            file_name_without_ext = os.path.splitext(os.path.basename(input_file))[0]
+            file_name_without_ext = os.path.splitext(task.original_filename)[0]
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             output_file = f"{file_name_without_ext}_{timestamp}.xlsx"
         else:

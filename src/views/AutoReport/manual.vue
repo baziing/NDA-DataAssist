@@ -107,7 +107,8 @@ export default {
       fileSize: null, // 文件大小
       outputFileSize: null, // 输出文件大小
       executionLog: '', // 执行日志
-      outputFileName: null, // 添加这一行
+      outputFileName: null,
+      downloadFilename: null, // 用于下载的文件名
       variables_filename: null, // 存储变量文件名
       variables: [], // 存储变量
       showVariables: false, // 控制变量内容显示
@@ -260,6 +261,7 @@ export default {
         .then(data => {
           console.log(data.message)
           this.taskId = data.task_id // 保存 task_id
+          this.downloadFilename = data.original_filename // 保存原始文件名
 
           // 使用 setInterval 定期获取进度
           const intervalId = setInterval(() => {
@@ -280,7 +282,7 @@ export default {
                 if (progressData.status['status'] === 'success') {
                   this.outputFile = progressData.output_file
                   this.outputFileName = progressData.output_filename
-                  this.outputFileSize = (progressData.output_file_size / 1024).toFixed(2) + ' KB' // 后续需要后端提供
+                  this.outputFileSize = (progressData.output_file_size / 1024).toFixed(2) + ' KB'
                   this.downloadButtonDisabled = false // 启用下载按钮
                   this.uploadButtonDisabled = true
                   this.skipButtonDisabled = true
@@ -318,6 +320,10 @@ export default {
         return
       }
 
+      // 获取当前时间戳
+      const now = new Date()
+      const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
+
       // 构造下载链接
       // 重要提示：如果您希望从同一网络中的其他计算机访问此服务，请将 "localhost" 替换为运行此服务的计算机的 IP 地址或主机名。
       const downloadUrl = `http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/download/${this.outputFile.replace('output/', '')}`
@@ -326,6 +332,7 @@ export default {
       const link = document.createElement('a')
       link.href = downloadUrl
       link.style.display = 'none'
+      link.download = `${this.downloadFilename.replace('.xlsx', '')}_${timestamp}.xlsx` // 设置下载文件名
       document.body.appendChild(link)
 
       // 模拟点击，触发下载
@@ -347,6 +354,7 @@ export default {
       this.uploadedFilename = null
       this.outputFile = null
       this.outputFileName = null
+      this.downloadFilename = null // 重置下载文件名
       this.uploadButtonDisabled = false
       this.startButtonDisabled = true
       this.downloadButtonDisabled = true
