@@ -125,6 +125,7 @@ export default {
       this.downloadButtonDisabled = true
       this.executionProgress = 0
       this.executionStatus = null
+      this.executionLog = '' // 清空执行日志
       if (this.isExecuting) {
         this.isExecuting = false
         this.uploadProgress = 0
@@ -167,6 +168,7 @@ export default {
           this.filename = data.filename // 保存上传后返回的filename
           this.activeNames = ['1', '2', '5'] // 展开“模板信息”和“导入变量”
           this.skipButtonDisabled = false // 启用“SKIP”和“上传”按钮
+          this.executionLog = '' // 清空执行日志
         })
         .catch(error => {
           console.error('Error:', error)
@@ -174,6 +176,7 @@ export default {
           this.$message.error(error.message)
           this.uploadProgress = 0 // 重置进度条
           this.skipButtonDisabled = true // 禁用“SKIP”
+          this.executionLog = '' // 清空执行日志
         })
     },
     // 新增处理变量文件上传

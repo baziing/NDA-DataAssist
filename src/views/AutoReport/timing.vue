@@ -1,6 +1,5 @@
 <template>
   <div class="timing-container">
-    <h2>定时报表任务创建</h2>
 
     <el-form ref="taskForm" :model="task" label-width="120px">
       <el-form-item label="上传文件">
@@ -161,6 +160,7 @@ export default {
       return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
     },
     handleFileChange(file, fileList) {
+      this.taskProgress = '' // 清空任务进度信息
       this.uploadProgress = 0
       this.uploadStatus = null
       this.fileList = fileList
