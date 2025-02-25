@@ -258,6 +258,7 @@ class TaskScheduler:
     def schedule_task(self, task_info):
         """安排任务"""
         job = None
+        logging.info(f"Scheduling task with time: {task_info['time']}") # 打印时间
         if task_info['frequency'] == 'day':
             job = self.scheduler.every().day.at(task_info['time'])
         elif task_info['frequency'] == 'week':
