@@ -15,17 +15,64 @@ from pathlib import Path
 dotenv_path = Path('.') / '.env.development'
 load_dotenv(dotenv_path=dotenv_path)
 
-from backend import report_generator_v2
-generate_report = report_generator_v2.generate_report
 from backend.config import OUTPUT_DIR, DB_CONFIG
 from backend.report_task import ReportTask
 from backend.task_scheduler import TaskScheduler  # 导入 TaskScheduler
 from backend.tools.excel_utils import check_excel_file
+from backend.utils import connect_db, execute_query
 import sqlparse
+import mysql.connector
 
 app = Flask(__name__, static_folder='../../dist', static_url_path='/')
 CORS(app)
 
+# 数据库配置
+app.config['DB_CONFIG'] = DB_CONFIG
+
+@app.route('/check_excel_file', methods=['POST'])
+def check_excel_file_api():
+    """
+    接收前端传递的文件，并调用 check_excel_file 函数进行文件校验。
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({"is_valid": False, "message": "No file part"}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"is_valid": False, "message": "No selected file"}), 400
+
+        # 将文件保存到临时位置
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        file.save(file_path)
+
+        # 调用 check_excel_file 函数进行校验
+        result = check_excel_file(file_path)
+
+        # 删除临时文件
+        os.remove(file_path)
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        return jsonify({"is_valid": False, "message": f"An error occurred: {str(e)}"}), 500
+@app.route('/check_task_name', methods=['POST'])
+def check_task_name():
+    """检查任务名称是否重名"""
+    data = request.get_json()
+    game_type = data.get('gameType')
+    task_name = data.get('taskName')
+
+    if not game_type or not task_name:
+        return jsonify({'is_valid': False, 'message': '游戏分类和任务名称不能为空'}), 400
+
+    tasks = task_scheduler.get_tasks()
+    for task in tasks:
+        if task['gameType'] == game_type and task['taskName'] == task_name:
+            return jsonify({'is_valid': False, 'message': '任务名称已存在'}), 200
+
+    return jsonify({'is_valid': True}), 200
 @app.route('/check_sql', methods=['POST'])
 def check_sql():
     """检查 SQL 语句的有效性"""
@@ -50,28 +97,14 @@ def check_sql():
         return jsonify({"is_valid": False, "message": f"读取 Excel 文件失败: {str(e)}"}), 400
 
     # 验证 SQL 语句的有效性
-    for sql in sql_list:
+    for sql_dict in sql_list:
         try:
+            sql = sql_dict['output_sql']
+            logging.info(f"正在校验的 SQL 语句：{sql}")  # 添加详细日志
             sqlparse.parse(sql)
         except Exception as e:
+            logging.error(f"SQL 校验失败，sql_dict: {sql_dict}, 错误信息: {str(e)}") # 添加详细日志
             return jsonify({"is_valid": False, "message": f"SQL 语句无效: {str(e)}"}), 400
-
-    return jsonify({'is_valid': True}), 200
-
-@app.route('/check_task_name', methods=['POST'])
-def check_task_name():
-    """检查任务名称是否重名"""
-    data = request.get_json()
-    game_type = data.get('gameType')
-    task_name = data.get('taskName')
-
-    if not game_type or not task_name:
-        return jsonify({'is_valid': False, 'message': '游戏分类和任务名称不能为空'}), 400
-
-    tasks = task_scheduler.get_tasks()
-    for task in tasks:
-        if task['gameType'] == game_type and task['taskName'] == task_name:
-            return jsonify({'is_valid': False, 'message': '任务名称已存在'}), 200
 
     return jsonify({'is_valid': True}), 200
 
@@ -86,7 +119,7 @@ VARIABLES_FOLDER = os.path.join(UPLOAD_FOLDER, 'variables')
 os.makedirs(TEMPLATES_FOLDER, exist_ok=True)
 os.makedirs(VARIABLES_FOLDER, exist_ok=True)
 
-# 创建 TaskScheduler 实例
+# 创建 TaskScheduler 实例,TaskScheduler的构造函数会自动连接数据库
 task_scheduler = TaskScheduler()
 
 @app.route('/')
@@ -96,29 +129,105 @@ def index():
 tasks = {}
 
 @app.route('/create_task', methods=['POST'])
-def create_task():
-    """创建定时任务"""
-    data = request.get_json()
-    # 检查必要参数
-    required_fields = ['filename', 'gameType', 'taskName', 'frequency', 'time']
-    if not all(field in data for field in required_fields):
-        return jsonify({'error': 'Missing required fields'}), 400
+def create_task_api():
+    """
+    接收前端传递的任务信息，并将相关字段传入 `autoreport_templates` 表，并按照顺序给文件中的 SQL 排序传入 `sql_order` 字段。
+    """
+    try:
+        data = request.get_json()
+        filename = data.get('filename')
+        game_type = data.get('gameType')
+        task_name = data.get('taskName')
+        frequency = data.get('frequency')
+        day_of_month = data.get('dayOfMonth')
+        day_of_week = data.get('dayOfWeek')
+        time = data.get('time')
 
-    # 提取任务信息
-    task_info = {
-        'filename': data['filename'],
-        'gameType': data['gameType'],
-        'taskName': data['taskName'],
-        'frequency': data['frequency'],
-        'time': data['time'],
-        'dayOfMonth': data.get('dayOfMonth'),  # 可选
-        'dayOfWeek': data.get('dayOfWeek'),   # 可选
-    }
+        if not filename or not game_type or not task_name or not frequency or not time:
+            return jsonify({"message": "请填写所有必填项！"}), 400
 
-    # 添加任务
-    task_scheduler.add_task(task_info)
+        # 文件上传路径
+        # upload_dir = 'input_files'
+        # os.makedirs(upload_dir, exist_ok=True)
+        file_path = os.path.join(TEMPLATES_FOLDER, data['uuidFileName'])
 
-    return jsonify({'message': 'Task created successfully'}), 200
+        # 从 Excel 文件中读取 SQL 语句
+        try:
+            excel_result = check_excel_file(file_path)
+            if not excel_result['is_valid']:
+                return jsonify({"message": f"读取 Excel 文件失败: {excel_result['message']}"}), 500
+            sql_list = excel_result['sql_list']
+        except Exception as e:
+            logging.error(f"读取 Excel 文件失败: {str(e)}", exc_info=True)
+            return jsonify({"message": f"读取 Excel 文件失败: {str(e)}"}), 500
+
+        # 验证 SQL 语句的有效性
+        # 验证 SQL 语句的有效性
+        import sqlparse
+        for sql_dict in sql_list:
+            try:
+                sql = sql_dict['output_sql']
+                logging.info(f"正在校验的 SQL 语句：{sql}")  # 添加详细日志
+                sqlparse.parse(sql)
+            except Exception as e:
+                logging.error(f"SQL 校验失败，sql_dict: {sql_dict}, 错误信息: {str(e)}", exc_info=True)
+                return jsonify({"message": f"SQL 语句无效: {str(e)}"}), 500
+
+        # 将相关字段传入 `autoreport_templates` 表，并按照顺序给文件中的 SQL 排序传入 `sql_order` 字段
+        db_config = app.config['DB_CONFIG']
+        connection = None  # 初始化 connection 为 None
+        cursor = None
+        sql_statement = None # 初始化
+        try:
+            connection = mysql.connector.connect(**db_config)
+            cursor = connection.cursor()
+
+            # 开始事务
+            connection.start_transaction()
+
+            # 插入 autoreport_tasks 表
+            # 插入 autoreport_tasks 表
+            sql = "INSERT INTO autoreport_tasks (gameType, taskName, frequency, dayOfMonth, dayOfWeek, `time`) VALUES (%s, %s, %s, %s, %s, %s)"
+            values = (
+                game_type,
+                task_name,
+                frequency,
+                day_of_month if day_of_month else None,
+                day_of_week if day_of_week else None,
+                time
+            )
+            cursor.execute(sql, values)
+            task_id = cursor.lastrowid
+
+            # 插入模板信息
+            sql_order = 1
+            for row in excel_result['sql_list']:
+                sql = "INSERT INTO autoreport_templates (task_id, db_name, output_sql, sql_order, transpose, format, pos) VALUES (%s, %s, %s, %s, %s, %s, %s)"
+                values = (str(task_id), row['db_name'], row['output_sql'], sql_order, row.get('transpose', False), row.get('format'), row.get('pos'))
+                cursor.execute(sql, values)
+                sql_order += 1
+
+            # 提交事务
+            connection.commit()
+            return jsonify({"message": "任务创建成功！"}), 200
+
+        except Exception as e:
+            if connection and connection.is_connected():
+                connection.rollback()  # 回滚事务
+            logging.error(f"插入 autoreport_templates 失败，当前 sql_statement: {sql_statement}, 错误信息: {str(e)}", exc_info=True)
+            return jsonify({"message": f"数据库操作失败: {str(e)}"}), 500
+
+        finally:
+            # 从 finally 块中移除关闭连接的代码
+            if connection and connection.is_connected():
+                if cursor:
+                    cursor.close()
+            # connection.close()  # 注释掉这行代码
+
+    except Exception as e:
+        connection = None # 确保连接未建立时也能回滚
+        logging.error(f"An error occurred: {str(e)}", exc_info=True)
+        return jsonify({"message": f"An error occurred: {str(e)}"}), 500
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -147,6 +256,7 @@ def upload_file():
         return jsonify({'message': 'File uploaded successfully', 'filename': filename, 'original_filename': file.filename }), 200
     else:
         return jsonify({'error': 'Invalid file type'}), 400
+
 
 @app.route('/generate', methods=['POST'])
 def generate_report_route():
@@ -275,45 +385,7 @@ def upload_vars():
             return jsonify({'error': f'Error processing file: {str(e)}'}), 400  # 更详细的错误信息
     else:
         return jsonify({'error': 'Invalid file type'}), 400
-
-@app.route('/check_excel_file', methods=['POST'])
-def check_excel_file_api():
-    """
-    接收前端传递的文件，并调用 check_excel_file 函数进行文件校验。
-    """
-    try:
-        if 'file' not in request.files:
-            return jsonify({"is_valid": False, "message": "No file part"}), 400
-
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({"is_valid": False, "message": "No selected file"}), 400
-
-        # 将文件保存到临时位置
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
-        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-        file.save(file_path)
-
-        # 调用 check_excel_file 函数进行校验
-        result = check_excel_file(file_path)
-
-        # 删除临时文件
-        os.remove(file_path)
-
-        return jsonify(result), 200
-
-    except Exception as e:
-        return jsonify({"is_valid": False, "message": f"An error occurred: {str(e)}"}), 500
-
-@app.route('/markdown', methods=['GET'])
-def get_markdown():
-    try:
-        with open('src/views/AutoReport/instruction/index.md', 'r', encoding='utf-8') as f:
-            content = f.read()
-        return jsonify({'content': content}), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
+        
 if __name__ == '__main__':
     # 创建并启动调度器线程
     scheduler_thread = threading.Thread(target=task_scheduler.start)

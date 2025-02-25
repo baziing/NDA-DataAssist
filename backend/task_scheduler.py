@@ -4,7 +4,7 @@ import threading
 import json
 import os
 import sys  # 导入 sys 模块
-import mysql.connector
+# import mysql.connector # 不需要直接导入
 from datetime import datetime
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -14,6 +14,7 @@ from backend.config import DB_CONFIG
 from backend.tools.excel_utils import check_excel_file
 from backend.config.mail_config import MAIL_CONFIG
 from backend.tools.mail.email_sender import EmailSender
+from backend.utils import connect_db, execute_query  # 导入数据库连接函数
 
 # 配置日志
 log_dir = 'logs'
@@ -24,7 +25,7 @@ timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 log_file = os.path.join(log_dir, f'task_scheduler_{timestamp}.log')
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler(log_file),
@@ -35,6 +36,7 @@ logging.basicConfig(
 # 创建 Flask 应用
 app = Flask(__name__)
 CORS(app)  # 允许跨域请求
+app.debug = True
 
 # 数据库配置
 app.config['DB_CONFIG'] = DB_CONFIG
@@ -85,8 +87,10 @@ def check_task_name_api():
             return jsonify({"is_valid": False, "message": "游戏分类和任务名称不能为空"}), 400
 
         # 检查数据库，确保每个游戏分类下，任务名称不能重名
+        db_config = app.config['DB_CONFIG']
+        connection = None
+        cursor = None
         try:
-            db_config = app.config['DB_CONFIG']
             connection = mysql.connector.connect(**db_config)
             cursor = connection.cursor()
 
@@ -97,14 +101,14 @@ def check_task_name_api():
                 return jsonify({"is_valid": False, "message": "任务名称已存在"}), 200
             else:
                 return jsonify({"is_valid": True, "message": "任务名称可用"}), 200
-
         except Exception as e:
             return jsonify({"is_valid": False, "message": f"数据库连接或查询失败: {str(e)}"}), 500
-
         finally:
-            if connection.is_connected():
-                cursor.close()
+            if connection and connection.is_connected():
+                if cursor:
+                    cursor.close()
                 connection.close()
+
 
     except Exception as e:
         return jsonify({"is_valid": False, "message": f"An error occurred: {str(e)}"}), 500
@@ -139,21 +143,31 @@ def create_task_api():
                 return jsonify({"message": f"读取 Excel 文件失败: {excel_result['message']}"}), 500
             sql_list = excel_result['sql_list']
         except Exception as e:
+            logging.error(f"读取 Excel 文件失败: {str(e)}", exc_info=True)
             return jsonify({"message": f"读取 Excel 文件失败: {str(e)}"}), 500
 
         # 验证 SQL 语句的有效性
+        # 验证 SQL 语句的有效性
         import sqlparse
-        for sql in sql_list:
+        for sql_dict in sql_list:
             try:
+                sql = sql_dict['output_sql']
+                logging.info(f"正在校验的 SQL 语句：{sql}")  # 添加详细日志
                 sqlparse.parse(sql)
             except Exception as e:
+                logging.error(f"SQL 校验失败，sql_dict: {sql_dict}, 错误信息: {str(e)}", exc_info=True)
                 return jsonify({"message": f"SQL 语句无效: {str(e)}"}), 500
 
         # 将相关字段传入 `autoreport_templates` 表，并按照顺序给文件中的 SQL 排序传入 `sql_order` 字段
+        db_config = app.config['DB_CONFIG']
+        connection = None  # 初始化 connection 为 None
+        cursor = None
         try:
-            db_config = app.config['DB_CONFIG']
             connection = mysql.connector.connect(**db_config)
             cursor = connection.cursor()
+
+            # 开始事务
+            connection.start_transaction()
 
             # 插入 autoreport_tasks 表
             sql = "INSERT INTO autoreport_tasks (original_filename, gameType, taskName, frequency, dayOfMonth, dayOfWeek, time) VALUES (%s, %s, %s, %s, %s, %s, %s)"
@@ -161,70 +175,91 @@ def create_task_api():
             cursor.execute(sql, values)
             task_id = cursor.lastrowid
 
-            # 插入 autoreport_templates 表
+            # 插入模板信息
             sql_order = 1
-            for sql_statement in sql_list:
+            for row in excel_result['sql_list']:
                 sql = "INSERT INTO autoreport_templates (task_id, db_name, output_sql, sql_order, transpose) VALUES (%s, %s, %s, %s, %s)"
-                values = (task_id, excel_result['db_name'], sql_statement, sql_order, False)
+                values = (int(task_id), row['db_name'], row['output_sql'], sql_order, False)
                 cursor.execute(sql, values)
                 sql_order += 1
 
+            # 提交事务
             connection.commit()
             return jsonify({"message": "任务创建成功！"}), 200
 
         except Exception as e:
-            connection.rollback()
+            if connection and connection.is_connected():
+                connection.rollback()  # 回滚事务
+            logging.error(f"插入 autoreport_templates 失败，当前 sql_statement: {sql_statement}, 错误信息: {str(e)}", exc_info=True)
             return jsonify({"message": f"数据库操作失败: {str(e)}"}), 500
 
         finally:
-            if connection.is_connected():
-                cursor.close()
-                connection.close()
+            # 从 finally 块中移除关闭连接的代码
+            if connection and connection.is_connected():
+                if cursor:
+                    cursor.close()
+            # connection.close()  # 注释掉这行代码
 
     except Exception as e:
+        if connection and connection.is_connected():
+            connection.rollback()
+        logging.error(f"An error occurred: {str(e)}", exc_info=True)
         return jsonify({"message": f"An error occurred: {str(e)}"}), 500
 
 class TaskScheduler:
-    def __init__(self, tasks_file='backend/tasks.json'):
-        self.tasks = []
-        self.tasks_file = tasks_file
+    def __init__(self):
         self.scheduler = schedule.Scheduler()
         self.stop_event = threading.Event()  # 用于停止调度线程的事件
+        self.connection = None  # 初始化为 None
+        self.tasks = []
 
     def get_tasks(self):
-        """获取所有任务的副本"""
-        return self.tasks.copy()
-
-    def add_task(self, task_info):
-        """添加任务"""
-        self.tasks.append(task_info)
-        self.schedule_task(task_info)
-        self.save_tasks()  # 保存到文件
-        logging.info(f"任务已添加: {task_info}")
+        """获取所有任务"""
+        cursor = None
+        try:
+            if self.connection is None or not self.connection.is_connected():
+                self.connection = connect_db()  # 重新连接数据库
+            cursor = self.connection.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM autoreport_tasks")
+            tasks = cursor.fetchall()
+            return tasks
+        except Exception as e:
+            logging.error(f"获取任务失败: {e}")
+            return []
+        finally:
+            if cursor:
+                cursor.close()
 
     def load_tasks(self):
-        """从文件加载任务"""
-        if os.path.exists(self.tasks_file):
-            try:
-                with open(self.tasks_file, 'r') as f:
-                    self.tasks = json.load(f)
-                    for task in self.tasks:
-                        self.schedule_task(task)
-                logging.info(f"已加载任务: {self.tasks}")
-            except json.JSONDecodeError:
-                logging.error("任务文件格式错误，无法加载任务。")
-                self.tasks = []
+        """从数据库加载任务"""
+        cursor = None
+        try:
+            if self.connection is None or not self.connection.is_connected():
+                self.connection = connect_db()
+            cursor = self.connection.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM autoreport_tasks")
+            tasks = cursor.fetchall()
+            for task in tasks:
+                try:
+                    self.tasks.append(task)
+                    self.schedule_task(task)  # 重新安排已加载的任务
+                except Exception as e:
+                    logging.error(f"加载任务 {task} 失败: {e}", exc_info=True)
+            logging.info(f"已加载任务: {len(self.tasks)}")
 
-    def save_tasks(self):
-        """保存任务到文件"""
-        with open(self.tasks_file, 'w') as f:
-            json.dump(self.tasks, f)
+        except Exception as e:
+            logging.error(f"加载任务失败: {e}", exc_info=True)
+            self.tasks = []
+        finally:
+            if cursor:
+                cursor.close()
+
 
     def schedule_task(self, task_info):
         """安排任务"""
         job = None
         if task_info['frequency'] == 'day':
-            job = self.scheduler.every().day
+            job = self.scheduler.every().day.at(task_info['time'])
         elif task_info['frequency'] == 'week':
             if task_info['dayOfWeek']:
                 # schedule库的周几从0开始，0=周一，1=周二，...，6=周日
@@ -268,4 +303,11 @@ class TaskScheduler:
     def stop(self):
         """停止调度器"""
         self.stop_event.set()
+        self.close_connection()
         logging.info("定时任务调度器已停止")
+
+    def close_connection(self):
+        """关闭数据库连接"""
+        if self.connection and self.connection.is_connected():
+            self.connection.close()
+            logging.info("数据库连接已关闭")

@@ -30,7 +30,7 @@ def connect_db_with_config(db_config):
         db_config (dict): 数据库连接配置，包含host, port, user, password, database
     """
     try:
-        connection = mysql.connector.connect(**db_config)
+        connection = mysql.connector.connect(autocommit=False, **db_config)
         if connection.is_connected():
             logging.info(f'成功连接数据库: {db_config["host"]}')
             return connection

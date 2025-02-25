@@ -273,13 +273,13 @@ export default {
           if (!data.is_valid) {
             this.$message.error(data.message)
             this.taskProgress += `${this.getFormattedTimestamp()} - 任务名称校验失败: ${data.message}\n`
-            return
+            return // 显式返回，阻止后续的 .then() 执行
           }
 
           // 在这里添加 SQL 校验逻辑
           this.taskProgress += `${this.getFormattedTimestamp()} - 正在校验sql……\n`
           // 调用后端 API 校验 SQL
-          fetch(`http://${serverAddress}:${process.env.VUE_APP_API_PORT}/check_sql`, {
+          return fetch(`http://${serverAddress}:${process.env.VUE_APP_API_PORT}/check_sql`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
@@ -301,25 +301,20 @@ export default {
               if (!data.is_valid) {
                 this.$message.error(data.message)
                 this.taskProgress += `${this.getFormattedTimestamp()} - SQL 校验失败: ${data.message}\n`
-                return
+                throw new Error(data.message || 'SQL 校验失败') // 抛出异常，阻止后续的 .then() 执行
               }
-            })
-            .catch(error => {
-              this.$message.error(error.message)
-              this.taskProgress += `${this.getFormattedTimestamp()} - SQL校验失败\n`
-              return
-            })
 
-          // 正在创建任务
-          this.taskProgress += `${this.getFormattedTimestamp()} - 正在创建任务……\n`
-          // TODO: 调用后端 API 创建任务
-          fetch(`http://${serverAddress}:${process.env.VUE_APP_API_PORT}/create_task`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(this.task)
-          })
+              // 正在创建任务
+              this.taskProgress += `${this.getFormattedTimestamp()} - 正在创建任务……\n`
+              // TODO: 调用后端 API 创建任务
+              return fetch(`http://${serverAddress}:${process.env.VUE_APP_API_PORT}/create_task`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(this.task)
+              })
+            })
             .then(response => {
               if (response.ok) {
                 return response.json()
@@ -337,12 +332,14 @@ export default {
             })
             .catch(error => {
               this.$message.error(error.message)
-              this.taskProgress += `${this.getFormattedTimestamp()} - 创建任务失败: ${error.message}\n`
+              this.taskProgress += `${this.getFormattedTimestamp()} - ${error.message}\n`
+              this.taskProgress += `${this.getFormattedTimestamp()} - 任务终止。\n`
             })
         })
         .catch(error => {
           this.$message.error(error.message)
           this.taskProgress += `${this.getFormattedTimestamp()} - 任务名称校验失败: ${error.message}\n`
+          this.taskProgress += `${this.getFormattedTimestamp()} - 任务终止。\n`
         })
     }
   }
