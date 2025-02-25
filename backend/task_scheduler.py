@@ -335,19 +335,23 @@ class TaskScheduler:
 
             # 创建一个模拟的task对象
             class MockTask:
-                def __init__(self):
+                def __init__(self, task_name):
                     self.cancelled = False
                     self.progress_data = {'progress': 0, 'log': ''}
+                    self.task_name = task_name
 
                 def update_progress(self, data):
                     self.progress_data = data
                     logging.info(f"Task Progress: {data['progress']}%, Log: {data['log']}")
 
-            task = MockTask()
+            task = MockTask(task_data['taskName'])
             # 调用 generate_report 函数
-            output_path = generate_report(task, data_frame=df, variables_filename=None)
+            output_path = generate_report(task, task_info, data_frame=df, variables_filename=None)
 
-            logging.info(f"任务 {task_info['taskName']} 执行完成，报表已生成: {output_path}")
+            if output_path is None:
+                logging.error(f"任务 {task_info['taskName']} 执行完成，但报表路径为空")
+            else:
+                logging.info(f"任务 {task_info['taskName']} 执行完成，报表已生成: {output_path}")
 
         except Exception as e:
             logging.error(f"任务 {task_info['taskName']} 执行失败: {e}")

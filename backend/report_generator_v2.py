@@ -29,10 +29,11 @@ def cleanup_old_files(directory, days=7):
                 except Exception as e:
                     logging.error(f'删除文件失败: {filename}, 错误: {e}')
 
-def generate_report(task, data_frame=None, input_file=None, variables_filename=None, output_file=None):
+def generate_report(task, task_info, data_frame=None, input_file=None, variables_filename=None, output_file=None):
     """
     生成报表
     """
+    logging.info(f'generate_report called with task: {task}')
     try:
         # 优先使用 data_frame，如果没有，再尝试从 input_file 读取
         if data_frame is None:
@@ -423,10 +424,16 @@ def generate_report(task, data_frame=None, input_file=None, variables_filename=N
         #     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         #     output_file = f"report_{timestamp}.xlsx"
         
-        # 获取原始文件名（不带扩展名）
-        file_name_without_ext = os.path.splitext(task.original_filename)[0]
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        output_file = f"{file_name_without_ext}_{timestamp}.xlsx"
+        # 根据是否传入 input_file 确定文件名
+        if input_file:
+            # 手动生成，使用原始文件名
+            file_name_without_ext = os.path.splitext(os.path.basename(input_file))[0]
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            output_file = f"{file_name_without_ext}_{timestamp}.xlsx"
+        else:
+            # 定时配置，使用任务名
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            output_file = f"{task.task_name}_{timestamp}.xlsx"
 
         # 删除所有临时表
         temp_sheets = [sheet for sheet in wb.sheetnames if sheet.startswith('临时表')]
@@ -440,40 +447,41 @@ def generate_report(task, data_frame=None, input_file=None, variables_filename=N
         task.update_progress({'progress':100, 'log':'保存文件'}) # 保存文件后：更新 100%
         logging.info(f'报表生成成功: {output_path}')
 
-        # 获取邮件配置
-        file_name = os.path.basename(input_file)
-        report_type = os.path.basename(os.path.dirname(input_file))
-        logging.info(f'正在获取邮件配置，文件名: {file_name}, 报表类型: {report_type}')
-        mail_config = get_mail_config(file_name, report_type)
+        # # 获取邮件配置
+        # file_name = os.path.basename(input_file)
+        # report_type = os.path.basename(os.path.dirname(input_file))
+        # logging.info(f'正在获取邮件配置，文件名: {file_name}, 报表类型: {report_type}')
+        # mail_config = get_mail_config(file_name, report_type)
         
-        if mail_config:
-            logging.info(f'找到邮件配置: {mail_config}')
-            try:
-                # 替换日期变量
-                subject = replace_date_variables(mail_config['subject'])
-                body = replace_date_variables(mail_config['body'])
+        # if mail_config:
+        #     logging.info(f'找到邮件配置: {mail_config}')
+        #     try:
+        #         # 替换日期变量
+        #         subject = replace_date_variables(mail_config['subject'])
+        #         body = replace_date_variables(mail_config['body'])
                 
-                # 发送邮件
-                sender = EmailSender()
-                success = sender.send_email(
-                    subject=subject,
-                    recipients=mail_config['to'],
-                    cc=mail_config.get('cc', []),
-                    body=body,
-                    attachments=[output_path]
-                )
+        #         # 发送邮件
+        #         sender = EmailSender()
+        #         success = sender.send_email(
+        #             subject=subject,
+        #             recipients=mail_config['to'],
+        #             cc=mail_config.get('cc', []),
+        #             body=body,
+        #             attachments=[output_path]
+        #         )
                 
-                if success:
-                    logging.info(f'邮件发送成功: {mail_config["to"]}')
-                else:
-                    logging.error('邮件发送失败')
-            except Exception as e:
-                logging.error(f'邮件发送失败: {e}')
-            finally:
-                cleanup_old_files(os.path.join(UPLOAD_FOLDER, 'variables'))
+        #         if success:
+        #             logging.info(f'邮件发送成功: {mail_config["to"]}')
+        #         else:
+        #             logging.error('邮件发送失败')
+        #     except Exception as e:
+        #         logging.error(f'邮件发送失败: {e}')
+        #     finally:
+        #         cleanup_old_files(os.path.join(UPLOAD_FOLDER, 'variables'))
         return output_path
     except Exception as e:
         logging.error(f'报表生成失败: {e}')
+        logging.info(f'generate_report returning: {output_path}')
         raise
 
 def apply_format_rules(worksheet, format_rules):
