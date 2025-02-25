@@ -73,6 +73,16 @@ def check_task_name():
             return jsonify({'is_valid': False, 'message': '任务名称已存在'}), 200
 
     return jsonify({'is_valid': True}), 200
+
+@app.route('/get_tasks', methods=['GET'])
+def get_tasks_api():
+    """获取所有任务"""
+    try:
+        tasks = task_scheduler.get_tasks()
+        return jsonify(tasks), 200
+    except Exception as e:
+        return jsonify({'error': f'获取任务失败: {str(e)}'}), 500
+
 @app.route('/check_sql', methods=['POST'])
 def check_sql():
     """检查 SQL 语句的有效性"""
@@ -209,6 +219,10 @@ def create_task_api():
 
             # 提交事务
             connection.commit()
+
+            # 重新加载任务
+            task_scheduler.load_tasks()
+
             return jsonify({"message": "任务创建成功！"}), 200
 
         except Exception as e:

@@ -126,8 +126,27 @@ export default {
       fileList: [],
       uploadProgress: 0,
       uploadStatus: null,
-      taskProgress: ''
+      taskProgress: '',
+      tasks: [] // 假设任务列表存储在这个变量中
     }
+  },
+  created() {
+    // 获取任务列表
+    fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/get_tasks`)
+      .then(response => {
+        if (response.ok) {
+          return response.json()
+        } else {
+          throw new Error('获取任务列表失败')
+        }
+      })
+      .then(data => {
+        console.log('任务列表:', data)
+        // this.tasks = data; // 假设任务列表存储在 this.tasks 中
+      })
+      .catch(error => {
+        console.error('Error:', error)
+      })
   },
   methods: {
     getFormattedTimestamp() {
@@ -331,6 +350,24 @@ export default {
               this.taskProgress += `${this.getFormattedTimestamp()} - 创建成功。\n`
               // 清空表单
               this.clearForm()
+              // 触发事件
+              this.$bus.$emit('task-created')
+              // 重新获取任务列表
+              fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/get_tasks`)
+                .then(response => {
+                  if (response.ok) {
+                    return response.json()
+                  } else {
+                    throw new Error('获取任务列表失败')
+                  }
+                })
+                .then(data => {
+                  console.log('更新后的任务列表:', data)
+                  // this.tasks = data; // 假设任务列表存储在 this.tasks 中
+                })
+                .catch(error => {
+                  console.error('Error:', error)
+                })
             })
             .catch(error => {
               this.$message.error(error.message)

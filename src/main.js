@@ -45,6 +45,8 @@ Object.keys(filters).forEach(key => {
 
 Vue.config.productionTip = false
 
+Vue.prototype.$bus = new Vue() // 添加事件总线
+
 new Vue({
   el: '#app',
   router,
