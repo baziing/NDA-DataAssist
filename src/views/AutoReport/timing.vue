@@ -51,38 +51,40 @@
       </el-form-item>
 
       <el-form-item label="定时设置">
-        <el-select v-model="task.frequency" placeholder="请先选择频率" style="margin-right: 10px;">
-          <el-option label="每月" value="month" />
-          <el-option label="每周" value="week" />
-          <el-option label="每日" value="day" />
-        </el-select>
+        <div style="display: flex;  width: 100%;">
+          <el-select v-model="task.frequency" placeholder="请先选择频率" style="flex: 1; max-width: 200px; margin-right: 10px;">
+            <el-option label="每月" value="month" />
+            <el-option label="每周" value="week" />
+            <el-option label="每日" value="day" />
+          </el-select>
 
-        <el-select v-if="task.frequency === 'month'" v-model="task.dayOfMonth" placeholder="请选择日期" style="margin-right: 10px;">
-          <el-option v-for="day in 31" :key="day" :label="day + '日'" :value="day" />
-        </el-select>
+          <el-select v-if="task.frequency === 'month'" v-model="task.dayOfMonth" placeholder="请选择日期" style="flex: 1; max-width: 200px; margin-right: 10px;">
+            <el-option v-for="day in 31" :key="day" :label="day + '日'" :value="day" />
+          </el-select>
 
-        <el-select v-if="task.frequency === 'week'" v-model="task.dayOfWeek" placeholder="请选择星期" style="margin-right: 10px;">
-          <el-option label="周一" value="1" />
-          <el-option label="周二" value="2" />
-          <el-option label="周三" value="3" />
-          <el-option label="周四" value="4" />
-          <el-option label="周五" value="5" />
-          <el-option label="周六" value="6" />
-          <el-option label="周日" value="7" />
-        </el-select>
+          <el-select v-if="task.frequency === 'week'" v-model="task.dayOfWeek" placeholder="请选择星期" style="flex: 1; max-width: 200px; margin-right: 10px;">
+            <el-option label="周一" value="1" />
+            <el-option label="周二" value="2" />
+            <el-option label="周三" value="3" />
+            <el-option label="周四" value="4" />
+            <el-option label="周五" value="5" />
+            <el-option label="周六" value="6" />
+            <el-option label="周日" value="7" />
+          </el-select>
 
-        <el-select v-if="!task.frequency" v-model="task.daySetting" placeholder="请选择" style="margin-right: 10px;" disabled />
-        <el-select v-else-if="task.frequency === 'day'" v-model="task.daySetting" placeholder="无需选择" style="margin-right: 10px;" disabled>
-          <el-option label="无需选择" value="none" />
-        </el-select>
+          <el-select v-if="!task.frequency" v-model="task.daySetting" placeholder="请选择" style="flex: 1; max-width: 200px; margin-right: 10px;" disabled />
+          <el-select v-else-if="task.frequency === 'day'" v-model="task.daySetting" placeholder="无需选择" style="flex: 1; max-width: 200px; margin-right: 10px;" disabled>
+            <el-option label="无需选择" value="none" />
+          </el-select>
 
-        <el-time-picker
-          v-model="task.time"
-          placeholder="选择时间"
-          format="HH:mm"
-          value-format="HH:mm"
-          style="margin-right: 10px;"
-        />
+          <el-time-picker
+            v-model="task.time"
+            placeholder="选择时间"
+            format="HH:mm"
+            value-format="HH:mm"
+            style="flex: 1; max-width: 200px;"
+          />
+        </div>
       </el-form-item>
 
       <el-form-item>
@@ -94,7 +96,7 @@
         <el-input
           v-model="taskProgress"
           type="textarea"
-          :rows="4"
+          :rows="8"
           placeholder="任务进度信息"
           readonly
         />
@@ -183,11 +185,11 @@ export default {
           this.task.uuidFileName = data.filename // 保存后端返回的 UUID 文件名
           this.uploadProgress = 100
           this.uploadStatus = 'success'
-          this.taskProgress = `${this.getFormattedTimestamp()} - 文件上传成功`
+          this.taskProgress += `${this.getFormattedTimestamp()} - 文件上传成功\n`
         })
         .catch(error => {
           this.$message.error(error.message)
-          this.taskProgress = `${this.getFormattedTimestamp()} - 文件上传失败: ${error.message}`
+          this.taskProgress = `${this.getFormattedTimestamp()} - 文件上传失败: ${error.message}\n`
           this.uploadStatus = 'exception'
           this.uploadProgress = 0 // 重置进度条
           this.task.filename = ''
