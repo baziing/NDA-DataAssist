@@ -44,6 +44,10 @@ module.exports = {
         pathRewrite: {
           '^/dev-api': ''
         }
+      },
+      '/task_management': {
+        target: 'http://localhost:5002', // 后端API服务器地址
+        changeOrigin: true
       }
     }
   },

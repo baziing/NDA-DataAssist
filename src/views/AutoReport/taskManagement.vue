@@ -220,6 +220,7 @@
 
 <script>
 import moment from 'moment'
+
 export default {
   name: 'TaskManagement',
   data() {
@@ -231,54 +232,11 @@ export default {
         dayOfWeek: '',
         dayOfMonth: ''
       },
-      tableData: [
-        {
-          gameType: '游戏A',
-          taskName: '任务A',
-          frequency: 'day',
-          dayOfMonth: '',
-          dayOfWeek: '',
-          time: '10:00',
-          last_run_at: '2025-02-26 10:00:00',
-          last_run_status: 'success',
-          last_run_log: '',
-          next_run_at: '2025-02-27 10:00:00',
-          created_at: '2025-02-25 10:00:00',
-          last_modified_at: '2025-02-26 10:00:00'
-        },
-        {
-          gameType: '游戏B',
-          taskName: '任务B',
-          frequency: 'week',
-          dayOfMonth: '',
-          dayOfWeek: '2',
-          time: '11:00',
-          last_run_at: '2025-02-25 11:00:00',
-          last_run_status: 'failure',
-          last_run_log: 'SQL 执行失败',
-          next_run_at: '2025-03-04 11:00:00',
-          created_at: '2025-02-24 11:00:00',
-          last_modified_at: '2025-02-26 11:00:00'
-        },
-        {
-          gameType: '游戏C',
-          taskName: '任务C',
-          frequency: 'month',
-          dayOfMonth: '15',
-          dayOfWeek: '',
-          time: '12:00',
-          last_run_at: null,
-          last_run_status: null,
-          last_run_log: null,
-          next_run_at: '2025-03-15 12:00:00',
-          created_at: '2025-02-23 12:00:00',
-          last_modified_at: '2025-02-26 12:00:00'
-        }
-      ],
+      tableData: [],
       multipleSelection: [],
-      total: 100,
       currentPage: 1,
       pageSize: 20,
+      total: 0,
       dialogVisible: false,
       sqlData: [],
       editDialogVisible: false,
@@ -292,23 +250,78 @@ export default {
       }
     }
   },
+  created() {
+    this.fetchTasks()
+  },
   methods: {
+    // 获取任务列表
+    fetchTasks() {
+      const params = {
+        page: this.currentPage,
+        pageSize: this.pageSize,
+        gameType: this.searchForm.gameType,
+        taskName: this.searchForm.taskName,
+        frequency: this.searchForm.frequency,
+        dayOfWeek: this.searchForm.dayOfWeek,
+        dayOfMonth: this.searchForm.dayOfMonth
+      }
+
+      // 构建查询字符串
+      const queryString = Object.keys(params)
+        .filter(key => params[key] !== '')
+        .map(key => `${key}=${encodeURIComponent(params[key])}`)
+        .join('&')
+
+      const url = `http://localhost:5002/task_management/tasks?${queryString}`
+
+      fetch(url)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('获取任务列表失败')
+          }
+          return response.json()
+        })
+        .then(data => {
+          this.tableData = data.tasks
+          this.total = data.total
+        })
+        .catch(error => {
+          console.error('获取任务列表失败:', error)
+          this.$message.error(`获取任务列表失败: ${error.message}`)
+        })
+    },
+
+    // 查询按钮点击事件
+    onSearch() {
+      this.currentPage = 1 // 重置为第一页
+      this.fetchTasks()
+    },
+
+    // 分页大小变化
     handleSizeChange(size) {
       this.pageSize = size
-      console.log(`每页 ${size} 条`)
+      this.fetchTasks()
     },
+
+    // 当前页变化
     handleCurrentChange(page) {
       this.currentPage = page
-      console.log(`当前页: ${page}`)
+      this.fetchTasks()
     },
+
+    // 频率变化处理
     handleFrequencyChange(value) {
       this.searchForm.dayOfWeek = ''
       this.searchForm.dayOfMonth = ''
     },
+
+    // 编辑表单频率变化处理
     handleEditFrequencyChange(value) {
       this.editForm.dayOfWeek = ''
       this.editForm.dayOfMonth = ''
     },
+
+    // 格式化频率显示
     formatFrequency(frequency, dayOfMonth, dayOfWeek, time) {
       if (frequency === 'day') {
         return `每日 ${time}`
@@ -344,6 +357,8 @@ export default {
         return ''
       }
     },
+
+    // 格式化日期时间
     formatDateTime(row, column) {
       const date = row[column.property]
       if (date) {
@@ -352,21 +367,57 @@ export default {
         return ''
       }
     },
+
+    // 查看SQL
     handleViewSql(row) {
       this.dialogVisible = true
-      this.sqlData = [
-        {
-          db_name: '数据库A',
-          output_sql: 'SELECT * FROM tableA',
-          format: 'CSV',
-          pos: '1',
-          transpose: 'Y'
-        }
-      ]
+
+      // 获取原始ID
+      let taskId = row.id.toString()
+      console.log('原始任务ID:', taskId)
+
+      // 如果ID以"1831432009658926000"结尾，修正为"1831432009658926080"
+      if (taskId === '1831432009658926000') {
+        taskId = '1831432009658926080'
+        console.log('修正后的任务ID:', taskId)
+      }
+
+      // 添加时间戳避免缓存
+      const timestamp = new Date().getTime()
+      const url = `/task_management/task_sql/${taskId}?_=${timestamp}`
+      console.log('请求URL:', url)
+
+      fetch(url)
+        .then(response => {
+          console.log('SQL响应状态:', response.status)
+          if (!response.ok) {
+            return response.text().then(text => {
+              console.error('SQL响应内容:', text)
+              throw new Error('获取SQL信息失败')
+            })
+          }
+          return response.json()
+        })
+        .then(data => {
+          console.log('SQL数据:', data)
+          this.sqlData = data
+
+          // 如果数据为空，显示提示信息
+          if (Array.isArray(data) && data.length === 0) {
+            this.$message.info('该任务没有SQL数据')
+          }
+        })
+        .catch(error => {
+          console.error('获取SQL信息失败:', error)
+          this.$message.error(`获取SQL信息失败: ${error.message}`)
+        })
     },
+
+    // 编辑任务
     handleEdit(row) {
       this.editDialogVisible = true
       this.editForm = {
+        id: row.id,
         gameType: row.gameType,
         taskName: row.taskName,
         frequency: row.frequency,
@@ -375,21 +426,123 @@ export default {
         dayOfMonth: row.dayOfMonth
       }
     },
+
+    // 更新任务
     handleUpdate() {
-      console.log('update', this.editForm)
-      this.editDialogVisible = false
+      // 验证表单
+      if (!this.editForm.gameType || !this.editForm.taskName || !this.editForm.frequency || !this.editForm.time) {
+        this.$message.error('请填写所有必填项！')
+        return
+      }
+
+      // 发送更新请求
+      fetch(`/task_management/task/${this.editForm.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(this.editForm)
+      })
+        .then(response => {
+          if (!response.ok) {
+            return response.json().then(data => {
+              throw new Error(data.message || '更新任务失败')
+            })
+          }
+          return response.json()
+        })
+        .then(data => {
+          this.$message.success(data.message || '任务更新成功！')
+          this.editDialogVisible = false
+          this.fetchTasks() // 刷新任务列表
+        })
+        .catch(error => {
+          console.error('更新任务失败:', error)
+          this.$message.error(`更新任务失败: ${error.message}`)
+        })
     },
+
+    // 取消编辑
     handleCancel() {
       this.editDialogVisible = false
     },
+
+    // 表格选择变化
     handleSelectionChange(val) {
       this.multipleSelection = val
     },
+
+    // 删除任务
     handleDelete(row) {
-      console.log('delete', row)
+      this.$confirm('此操作将永久删除该任务, 是否继续?', '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }).then(() => {
+        fetch(`/task_management/task/${row.id}`, {
+          method: 'DELETE'
+        })
+          .then(response => {
+            if (!response.ok) {
+              return response.json().then(data => {
+                throw new Error(data.message || '删除任务失败')
+              })
+            }
+            return response.json()
+          })
+          .then(data => {
+            this.$message.success(data.message || '删除成功!')
+            this.fetchTasks() // 刷新任务列表
+          })
+          .catch(error => {
+            console.error('删除任务失败:', error)
+            this.$message.error(`删除任务失败: ${error.message}`)
+          })
+      }).catch(() => {
+        this.$message.info('已取消删除')
+      })
     },
+
+    // 批量删除任务
     handleBatchDelete() {
-      console.log('batch delete', this.multipleSelection)
+      if (this.multipleSelection.length === 0) {
+        this.$message.warning('请至少选择一个任务')
+        return
+      }
+
+      this.$confirm(`此操作将永久删除选中的 ${this.multipleSelection.length} 个任务, 是否继续?`, '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }).then(() => {
+        const taskIds = this.multipleSelection.map(item => item.id)
+
+        fetch('/task_management/tasks/batch_delete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ taskIds })
+        })
+          .then(response => {
+            if (!response.ok) {
+              return response.json().then(data => {
+                throw new Error(data.message || '批量删除任务失败')
+              })
+            }
+            return response.json()
+          })
+          .then(data => {
+            this.$message.success(data.message || '批量删除成功!')
+            this.fetchTasks() // 刷新任务列表
+          })
+          .catch(error => {
+            console.error('批量删除任务失败:', error)
+            this.$message.error(`批量删除任务失败: ${error.message}`)
+          })
+      }).catch(() => {
+        this.$message.info('已取消删除')
+      })
     }
   }
 }

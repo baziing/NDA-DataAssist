@@ -22,12 +22,20 @@ from backend.tools.excel_utils import check_excel_file
 from backend.utils import connect_db, execute_query
 import sqlparse
 import mysql.connector
+from backend.task_management import register_task_management_routes
 
 app = Flask(__name__, static_folder='../../dist', static_url_path='/')
 CORS(app)
 
 # 数据库配置
 app.config['DB_CONFIG'] = DB_CONFIG
+
+# 创建TaskScheduler实例
+task_scheduler = TaskScheduler()
+
+# 注册任务管理相关的路由，传入task_scheduler实例
+register_task_management_routes(app, task_scheduler)
+print("任务管理路由已注册")
 
 @app.route('/check_excel_file', methods=['POST'])
 def check_excel_file_api():
@@ -129,9 +137,6 @@ VARIABLES_FOLDER = os.path.join(UPLOAD_FOLDER, 'variables')
 os.makedirs(TEMPLATES_FOLDER, exist_ok=True)
 os.makedirs(VARIABLES_FOLDER, exist_ok=True)
 
-# 创建 TaskScheduler 实例,TaskScheduler的构造函数会自动连接数据库
-task_scheduler = TaskScheduler()
-
 @app.route('/')
 def index():
     return app.send_static_file('index.html')
@@ -189,7 +194,10 @@ def create_task_api():
                 logging.error(f"SQL 校验失败，sql_dict: {sql_dict}, 错误信息: {str(e)}", exc_info=True)
                 return jsonify({"message": f"SQL 语句无效: {str(e)}"}), 500
 
-        # 将相关字段传入 `autoreport_templates` 表，并按照顺序给文件中的 SQL 排序传入 `sql_order` 字段
+        # 生成任务ID
+        task_id = int(time.time() * 1000000)
+        
+        # 将相关字段传入 `autoreport_tasks` 表，并按照顺序给文件中的 SQL 排序传入 `sql_order` 字段
         db_config = app.config['DB_CONFIG']
         connection = None
         cursor = None
@@ -415,9 +423,14 @@ def upload_vars():
         return jsonify({'error': 'Invalid file type'}), 400
         
 if __name__ == '__main__':
+    # 打印所有注册的路由
+    print("已注册的路由:")
+    for rule in app.url_map.iter_rules():
+        print(f"{rule.endpoint}: {rule.rule}")
+    
     # 创建并启动调度器线程
     scheduler_thread = threading.Thread(target=task_scheduler.start)
-    scheduler_thread.daemon = True  # 设置为守护线程，以便主线程退出时自动退出
+    scheduler_thread.daemon = True
     scheduler_thread.start()
 
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('VUE_APP_API_PORT')))
