@@ -92,8 +92,9 @@
           :formatter="formatDateTime"
           sortable
         />
-        <el-table-column label="操作" width="250">
+        <el-table-column label="操作" width="350">
           <template slot-scope="scope">
+            <el-button size="mini">下载报表</el-button>
             <el-button size="mini" @click="handleViewSql(scope.row)">查看 SQL</el-button>
             <el-button size="mini" @click="handleEdit(scope.row)">编辑</el-button>
             <el-button size="mini" type="danger" @click="handleDelete(scope.row)">删除</el-button>
