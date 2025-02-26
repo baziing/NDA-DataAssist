@@ -74,6 +74,9 @@ def register_task_management_routes(app, task_scheduler):
             """
             cursor.execute(sql, params + [page_size, offset])
             tasks = cursor.fetchall()
+
+            # 将 task_id 转换为字符串类型
+            tasks = [{**task, 'id': str(task['id'])} for task in tasks]
             
             # 关闭数据库连接
             cursor.close()
@@ -106,7 +109,7 @@ def register_task_management_routes(app, task_scheduler):
                 WHERE task_id = %s
                 ORDER BY sql_order
             """
-            cursor.execute(sql, (task_id,))
+            cursor.execute(sql, (str(task_id),))
             sql_data = cursor.fetchall()
             
             print(f"查询结果: {sql_data}")  # 添加调试信息
@@ -122,7 +125,39 @@ def register_task_management_routes(app, task_scheduler):
             print(f"获取任务SQL出错: {str(e)}")  # 添加调试信息
             return jsonify({'error': f'获取任务SQL失败: {str(e)}'}), 500
 
-    @app.route('/task_management/task/<int:task_id>', methods=['PUT'])
+    @app.route('/task_management/task/<string:task_id>', methods=['GET'])
+    def get_task(task_id):
+        """获取指定任务的信息"""
+        try:
+            # 连接数据库
+            connection = mysql.connector.connect(**DB_CONFIG)
+            cursor = connection.cursor(dictionary=True)
+            
+            # 查询任务信息
+            sql = """
+                SELECT * FROM autoreport_tasks
+                WHERE id = %s
+            """
+            cursor.execute(sql, (task_id,))
+            task = cursor.fetchone()
+            
+            # 关闭数据库连接
+            cursor.close()
+            connection.close()
+            
+            if task is None:
+                return jsonify({'error': '任务不存在'}), 404
+            
+            # 将 task_id 转换为字符串类型
+            task['id'] = str(task['id'])
+            
+            return jsonify(task), 200
+            
+        except Exception as e:
+            logging.error(f"获取任务信息失败: {str(e)}", exc_info=True)
+            return jsonify({'error': f'获取任务信息失败: {str(e)}'}), 500
+
+    @app.route('/task_management/task/<string:task_id>', methods=['PUT'])
     def update_task(task_id):
         """更新任务信息"""
         try:
@@ -134,17 +169,25 @@ def register_task_management_routes(app, task_scheduler):
             day_of_week = data.get('dayOfWeek')
             time = data.get('time')
             
+            logging.info(f"更新任务 - 接收到的数据: {data}")
+            
             if not game_type or not task_name or not frequency or not time:
                 return jsonify({"message": "请填写所有必填项！"}), 400
             
             # 计算新的next_run_at
             next_run_at = calculate_next_run_at(frequency, day_of_month, day_of_week, time)
+            logging.info(f"更新任务 - 计算出的 next_run_at: {next_run_at}")
             if next_run_at is None:
                 return jsonify({"message": "计算下次运行时间失败"}), 500
             
             # 连接数据库
-            connection = mysql.connector.connect(**DB_CONFIG)
-            cursor = connection.cursor()
+            try:
+                connection = mysql.connector.connect(**DB_CONFIG)
+                cursor = connection.cursor()
+                logging.info("更新任务 - 数据库连接成功")
+            except Exception as e:
+                logging.error(f"更新任务 - 数据库连接失败: {str(e)}", exc_info=True)
+                return jsonify({"message": f"数据库连接失败: {str(e)}"}), 500
             
             # 更新任务信息
             sql = """
@@ -161,8 +204,10 @@ def register_task_management_routes(app, task_scheduler):
                 time, next_run_at, task_id
             )
             
+            logging.info(f"更新任务 - SQL: {sql}, 参数: {values}")
             cursor.execute(sql, values)
             connection.commit()
+            logging.info(f"更新任务 - 影响行数: {cursor.rowcount}")
             
             # 关闭数据库连接
             cursor.close()
@@ -170,14 +215,15 @@ def register_task_management_routes(app, task_scheduler):
             
             # 重新加载任务
             task_scheduler.load_tasks()
+            logging.info("更新任务 - 任务重新加载成功")
             
             return jsonify({"message": "任务更新成功！"}), 200
             
         except Exception as e:
-            logging.error(f"更新任务失败: {str(e)}", exc_info=True)
+            logging.error(f"更新任务失败: {str(e)}, data: {data}", exc_info=True)
             return jsonify({"message": f"更新任务失败: {str(e)}"}), 500
 
-    @app.route('/task_management/task/<int:task_id>', methods=['DELETE'])
+    @app.route('/task_management/task/<string:task_id>', methods=['DELETE'])
     def delete_task(task_id):
         """删除指定任务"""
         try:
@@ -190,11 +236,11 @@ def register_task_management_routes(app, task_scheduler):
             
             # 删除任务相关的SQL模板
             sql = "DELETE FROM autoreport_templates WHERE task_id = %s"
-            cursor.execute(sql, (task_id,))
+            cursor.execute(sql, (str(task_id),))
             
             # 删除任务
             sql = "DELETE FROM autoreport_tasks WHERE id = %s"
-            cursor.execute(sql, (task_id,))
+            cursor.execute(sql, (str(task_id),))
             
             # 提交事务
             connection.commit()
@@ -223,6 +269,9 @@ def register_task_management_routes(app, task_scheduler):
             
             if not task_ids:
                 return jsonify({"message": "未选择任何任务"}), 400
+            
+            # 确保所有任务ID都是字符串
+            task_ids = [str(task_id) for task_id in task_ids]
             
             # 连接数据库
             connection = mysql.connector.connect(**DB_CONFIG)
@@ -258,4 +307,4 @@ def register_task_management_routes(app, task_scheduler):
             if connection and connection.is_connected():
                 connection.rollback()
             logging.error(f"批量删除任务失败: {str(e)}", exc_info=True)
-            return jsonify({"message": f"批量删除任务失败: {str(e)}"}), 500 
+            return jsonify({"message": f"批量删除任务失败: {str(e)}"}), 500

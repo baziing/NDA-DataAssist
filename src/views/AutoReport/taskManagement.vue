@@ -160,7 +160,7 @@
         :closable="false"
         style="margin-bottom: 30px;"
       />
-      <el-form :model="editForm" label-width="120px">
+      <el-form ref="editForm" :model="editForm" label-width="120px">
         <el-form-item label="游戏分类">
           <el-select v-model="editForm.gameType" placeholder="请选择游戏分类">
             <el-option label="全部" value="" />
@@ -211,7 +211,7 @@
         </el-row>
       </el-form>
       <span slot="footer" class="dialog-footer">
-        <el-button type="primary" @click="handleUpdate">更 新</el-button>
+        <el-button type="primary" @click="submitEditForm">更 新</el-button>
         <el-button @click="handleCancel">取 消</el-button>
       </span>
     </el-dialog>
@@ -372,24 +372,31 @@ export default {
     handleViewSql(row) {
       this.dialogVisible = true
 
-      // 获取原始ID
-      let taskId = row.id.toString()
-      console.log('原始任务ID:', taskId)
+      console.log('原始行数据:', row)
+      console.log('原始ID:', row.id)
+      console.log('ID类型:', typeof row.id)
 
-      // 如果ID以"1831432009658926000"结尾，修正为"1831432009658926080"
-      if (taskId === '1831432009658926000') {
-        taskId = '1831432009658926080'
-        console.log('修正后的任务ID:', taskId)
+      if (row.originalId) {
+        console.log('原始ID字符串:', row.originalId)
       }
+
+      if (row.bigNumberId) {
+        console.log('BigNumber ID:', row.bigNumberId.toString())
+      }
+
+      // 尝试直接从数据库ID转换
+      const taskId = String(row.id)
+      console.log('转换后的ID:', taskId)
 
       // 添加时间戳避免缓存
       const timestamp = new Date().getTime()
       const url = `/task_management/task_sql/${taskId}?_=${timestamp}`
-      console.log('请求URL:', url)
+      console.log('查看SQL - 请求 URL:', url)
+      console.log('查看SQL - 请求头:', { 'Content-Type': 'application/json' })
 
       fetch(url)
         .then(response => {
-          console.log('SQL响应状态:', response.status)
+          console.log('查看SQL - SQL响应状态:', response.status)
           if (!response.ok) {
             return response.text().then(text => {
               console.error('SQL响应内容:', text)
@@ -415,51 +422,38 @@ export default {
 
     // 编辑任务
     handleEdit(row) {
+      this.editForm = { ...row } // 复制任务信息到编辑表单
       this.editDialogVisible = true
-      this.editForm = {
-        id: row.id,
-        gameType: row.gameType,
-        taskName: row.taskName,
-        frequency: row.frequency,
-        time: row.time,
-        dayOfWeek: row.dayOfWeek,
-        dayOfMonth: row.dayOfMonth
-      }
     },
 
-    // 更新任务
-    handleUpdate() {
-      // 验证表单
-      if (!this.editForm.gameType || !this.editForm.taskName || !this.editForm.frequency || !this.editForm.time) {
-        this.$message.error('请填写所有必填项！')
-        return
-      }
-
-      // 发送更新请求
-      fetch(`/task_management/task/${this.editForm.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(this.editForm)
-      })
-        .then(response => {
-          if (!response.ok) {
-            return response.json().then(data => {
-              throw new Error(data.message || '更新任务失败')
+    // 提交编辑表单
+    submitEditForm() {
+      this.$refs.editForm.validate(valid => {
+        if (valid) {
+          const taskId = String(this.editForm.id)
+          fetch(`http://localhost:5002/task_management/task/${taskId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.editForm)
+          })
+            .then(response => {
+              if (response.ok) {
+                this.$message.success('任务更新成功')
+                this.editDialogVisible = false
+                this.fetchTasks()
+              } else {
+                response.json().then(errorData => {
+                  this.$message.error(errorData.message || '任务更新失败')
+                })
+              }
             })
-          }
-          return response.json()
-        })
-        .then(data => {
-          this.$message.success(data.message || '任务更新成功！')
-          this.editDialogVisible = false
-          this.fetchTasks() // 刷新任务列表
-        })
-        .catch(error => {
-          console.error('更新任务失败:', error)
-          this.$message.error(`更新任务失败: ${error.message}`)
-        })
+            .catch(error => {
+              this.$message.error('任务更新失败: ' + error)
+            })
+        } else {
+          return false
+        }
+      })
     },
 
     // 取消编辑
@@ -479,7 +473,7 @@ export default {
         cancelButtonText: '取消',
         type: 'warning'
       }).then(() => {
-        fetch(`/task_management/task/${row.id}`, {
+        fetch(`http://localhost:5002/task_management/task/${this.getTaskId(row)}`, {
           method: 'DELETE'
         })
           .then(response => {
@@ -515,9 +509,9 @@ export default {
         cancelButtonText: '取消',
         type: 'warning'
       }).then(() => {
-        const taskIds = this.multipleSelection.map(item => item.id)
+        const taskIds = this.multipleSelection.map(item => this.getTaskId(item))
 
-        fetch('/task_management/tasks/batch_delete', {
+        fetch('http://localhost:5002/task_management/tasks/batch_delete', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -543,6 +537,17 @@ export default {
       }).catch(() => {
         this.$message.info('已取消删除')
       })
+    },
+
+    // 获取任务ID
+    getTaskId(row) {
+      if (row.bigNumberId) {
+        return String(row.bigNumberId)
+      } else if (row.originalId) {
+        return String(row.originalId)
+      } else {
+        return String(row.id)
+      }
     }
   }
 }

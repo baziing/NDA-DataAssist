@@ -35,7 +35,6 @@ task_scheduler = TaskScheduler()
 
 # 注册任务管理相关的路由，传入task_scheduler实例
 register_task_management_routes(app, task_scheduler)
-print("任务管理路由已注册")
 
 @app.route('/check_excel_file', methods=['POST'])
 def check_excel_file_api():
@@ -194,10 +193,7 @@ def create_task_api():
                 logging.error(f"SQL 校验失败，sql_dict: {sql_dict}, 错误信息: {str(e)}", exc_info=True)
                 return jsonify({"message": f"SQL 语句无效: {str(e)}"}), 500
 
-        # 生成任务ID
-        task_id = int(time.time() * 1000000)
-        
-        # 将相关字段传入 `autoreport_tasks` 表，并按照顺序给文件中的 SQL 排序传入 `sql_order` 字段
+        # 将相关字段传入 `autoreport_templates` 表，并按照顺序给文件中的 SQL 排序传入 `sql_order` 字段
         db_config = app.config['DB_CONFIG']
         connection = None
         cursor = None
@@ -423,14 +419,9 @@ def upload_vars():
         return jsonify({'error': 'Invalid file type'}), 400
         
 if __name__ == '__main__':
-    # 打印所有注册的路由
-    print("已注册的路由:")
-    for rule in app.url_map.iter_rules():
-        print(f"{rule.endpoint}: {rule.rule}")
-    
     # 创建并启动调度器线程
     scheduler_thread = threading.Thread(target=task_scheduler.start)
-    scheduler_thread.daemon = True
+    scheduler_thread.daemon = True  # 设置为守护线程，以便主线程退出时自动退出
     scheduler_thread.start()
 
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('VUE_APP_API_PORT')))
