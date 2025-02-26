@@ -144,6 +144,12 @@ export const constantRoutes = [
         meta: { title: '定时配置' } // 子页签2的标题
       },
       {
+        path: 'taskManagement',
+        component: () => import('@/views/AutoReport/taskManagement'),
+        name: 'TaskManagement',
+        meta: { title: '任务管理' }
+      },
+      {
         path: 'email',
         component: () => import('@/views/AutoReport/email'), // 子页签3的组件
         name: 'Email',
