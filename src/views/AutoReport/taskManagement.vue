@@ -60,6 +60,7 @@
           label="最近执行时间"
           width="150"
           :formatter="formatDateTime"
+          sortable
         />
         <el-table-column prop="last_run_status" label="最近执行状态" width="120">
           <template slot-scope="scope">
@@ -75,18 +76,21 @@
           label="下次执行"
           width="150"
           :formatter="formatDateTime"
+          sortable
         />
         <el-table-column
           prop="created_at"
           label="创建时间"
           width="150"
           :formatter="formatDateTime"
+          sortable
         />
         <el-table-column
           prop="last_modified_at"
           label="最后修改"
           width="150"
           :formatter="formatDateTime"
+          sortable
         />
         <el-table-column label="操作" width="250">
           <template slot-scope="scope">
@@ -259,7 +263,7 @@ export default {
   },
   methods: {
     // 获取任务列表
-    fetchTasks() {
+    fetchTasks(sortBy = '', sortOrder = '') {
       const params = {
         page: this.currentPage,
         pageSize: this.pageSize,
@@ -268,8 +272,8 @@ export default {
         frequency: this.searchForm.frequency,
         dayOfWeek: this.searchForm.dayOfWeek,
         dayOfMonth: this.searchForm.dayOfMonth,
-        sortBy: this.sortParams.map(p => p.field).join(','),
-        sortOrder: this.sortParams.map(p => p.order).join(',')
+        sortBy: sortBy,
+        sortOrder: sortOrder
       }
 
       // 构建查询字符串
@@ -554,6 +558,9 @@ export default {
       } else {
         return String(row.id)
       }
+    },
+    handleSortChange(column, prop, order) {
+      this.fetchTasks(prop, order)
     }
   }
 }
