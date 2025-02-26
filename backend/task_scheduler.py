@@ -6,7 +6,7 @@ import os
 import sys  # 导入 sys 模块
 import pandas as pd
 # import mysql.connector # 不需要直接导入
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from .report_generator_v2 import generate_report
@@ -159,7 +159,7 @@ def create_task_api():
                 logging.error(f"SQL 校验失败，sql_dict: {sql_dict}, 错误信息: {str(e)}", exc_info=True)
                 return jsonify({"message": f"SQL 语句无效: {str(e)}"}), 500
 
-        # 将相关字段传入 `autoreport_templates` 表，并按照顺序给文件中的 SQL 排序传入 `sql_order` 字段
+        # 将相关字段传入 `autoreport_templates` 表，并按照顺序给文件中的 SQL 排序传入 `sql_order` 字段 
         db_config = app.config['DB_CONFIG']
         connection = None  # 初始化 connection 为 None
         cursor = None
@@ -170,9 +170,13 @@ def create_task_api():
             # 开始事务
             connection.start_transaction()
 
+            # 计算 next_run_at
+            next_run_at = calculate_next_run_at(frequency, day_of_month, day_of_week, time)
+            logging.info(f"create_task_api - next_run_at value: {next_run_at}")  # 添加日志
+
             # 插入 autoreport_tasks 表
-            sql = "INSERT INTO autoreport_tasks (original_filename, gameType, taskName, frequency, dayOfMonth, dayOfWeek, time) VALUES (%s, %s, %s, %s, %s, %s, %s)"
-            values = (filename, game_type, task_name, frequency, day_of_month, day_of_week, time)
+            sql = "INSERT INTO autoreport_tasks (original_filename, gameType, taskName, frequency, dayOfMonth, dayOfWeek, time, last_run_at, last_run_status, last_run_log, next_run_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            values = (filename, game_type, task_name, frequency, day_of_month, day_of_week, time, None, None, '', next_run_at)
             cursor.execute(sql, values)
             task_id = cursor.lastrowid
 
@@ -242,6 +246,9 @@ class TaskScheduler:
             tasks = cursor.fetchall()
             for task in tasks:
                 try:
+                    # Convert dayOfWeek to string
+                    if task['dayOfWeek'] is not None:
+                        task['dayOfWeek'] = str(task['dayOfWeek'])
                     self.tasks.append(task)
                     self.schedule_task(task)  # 重新安排已加载的任务
                 except Exception as e:
@@ -266,15 +273,15 @@ class TaskScheduler:
             if task_info['dayOfWeek']:
                 # schedule库的周几从0开始，0=周一，1=周二，...，6=周日
                 weekday_map = {
-                    1: 'monday',
-                    2: 'tuesday',
-                    3: 'wednesday',
-                    4: 'thursday',
-                    5: 'friday',
-                    6: 'saturday',
-                    7: 'sunday',
+                    1: 0,  # Monday
+                    2: 1,  # Tuesday
+                    3: 2,  # Wednesday
+                    4: 3,  # Thursday
+                    5: 4,  # Friday
+                    6: 5,  # Saturday
+                    7: 6  # Sunday
                 }
-                day_of_week = weekday_map.get(int(task_info['dayOfWeek']))
+                day_of_week = task_info['dayOfWeek']
                 if day_of_week:
                     job = getattr(self.scheduler.every(), day_of_week).at(task_info['time'])
         elif task_info['frequency'] == 'month':
@@ -358,8 +365,39 @@ class TaskScheduler:
             else:
                 logging.info(f"任务 {task_info['taskName']} 执行完成，报表已生成: {output_path}")
 
+            # 更新数据库
+            now = datetime.now()
+            next_run_at = calculate_next_run_at(task_info['frequency'], task_info['dayOfMonth'], task_info['dayOfWeek'], task_info['time'])
+            update_sql = "UPDATE autoreport_tasks SET last_run_at = %s, last_run_status = %s, last_run_log = %s, next_run_at = %s WHERE id = %s"
+            update_values = (now, 'success', '', next_run_at, task_info['id'])
+            try:
+                cursor = self.connection.cursor()
+                cursor.execute(update_sql, update_values)
+                self.connection.commit()
+                logging.info(f"任务 {task_info['taskName']} 数据库更新成功")
+            except Exception as e:
+                logging.error(f"任务 {task_info['taskName']} 数据库更新失败: {e}")
+            finally:
+                if cursor:
+                    cursor.close()
+
         except Exception as e:
             logging.error(f"任务 {task_info['taskName']} 执行失败: {e}")
+            # 更新数据库
+            now = datetime.now()
+            next_run_at = calculate_next_run_at(task_info['frequency'], task_info['dayOfMonth'], task_info['dayOfWeek'], task_info['time'])
+            update_sql = "UPDATE autoreport_tasks SET last_run_at = %s, last_run_status = %s, last_run_log = %s, next_run_at = %s WHERE id = %s"
+            update_values = (now, 'failure', str(e), next_run_at, task_info['id'])
+            try:
+                cursor = self.connection.cursor()
+                cursor.execute(update_sql, update_values)
+                self.connection.commit()
+                logging.info(f"任务 {task_info['taskName']} 数据库更新失败: {e}")
+            except Exception as e:
+                logging.error(f"任务 {task_info['taskName']} 数据库更新失败: {e}")
+            finally:
+                if cursor:
+                    cursor.close()
 
     def start(self):
         """启动调度器"""
@@ -380,3 +418,49 @@ class TaskScheduler:
         if self.connection and self.connection.is_connected():
             self.connection.close()
             logging.info("数据库连接已关闭")
+
+def calculate_next_run_at(frequency, day_of_month, day_of_week, time):
+    """计算下一次执行的时间"""
+    logging.info(f"calculate_next_run_at called with: frequency={frequency}, day_of_month={day_of_month}, day_of_week={day_of_week}, time={time}")
+    now = datetime.now()
+    if frequency == 'day':
+        next_run_at = datetime.combine(now.date(), datetime.strptime(time, '%H:%M').time())
+        if next_run_at <= now:
+            next_run_at += timedelta(days=1)
+    elif frequency == 'week':
+        if day_of_week:
+            weekday_map = {
+                1: 0,  # Monday
+                2: 1,  # Tuesday
+                3: 2,  # Wednesday
+                4: 3,  # Thursday
+                5: 4,  # Friday
+                6: 5,  # Saturday
+                7: 6  # Sunday
+            }
+            day_of_week = weekday_map.get(int(day_of_week))
+            days_ahead = day_of_week - now.weekday()
+            if days_ahead <= 0:  # Target day is today or in the past
+                days_ahead += 7
+            next_run_at = now + timedelta(days=days_ahead)
+            next_run_at = datetime.combine(next_run_at.date(), datetime.strptime(time, '%H:%M').time())
+    elif frequency == 'month':
+        if day_of_month:
+            try:
+                day_of_month = int(day_of_month)
+                next_run_at = datetime(now.year, now.month, day_of_month, int(time[:2]), int(time[3:]))
+                if next_run_at <= now:
+                    month = now.month + 1
+                    year = now.year
+                    if month > 12:
+                        month = 1
+                        year += 1
+                    next_run_at = datetime(year, month, day_of_month, int(time[:2]), int(time[3:]))
+            except ValueError:
+                # Handle invalid day_of_month
+                next_run_at = None
+    else:
+        next_run_at = None
+
+    logging.info(f"calculate_next_run_at returning: {next_run_at}")
+    return next_run_at
