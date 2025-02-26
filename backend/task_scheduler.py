@@ -21,16 +21,15 @@ from backend.utils import connect_db, execute_query  # 导入数据库连接函�
 log_dir = 'logs'
 os.makedirs(log_dir, exist_ok=True)
 
-# 生成带时间戳的日志文件名
-timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-log_file = os.path.join(log_dir, f'task_scheduler_{timestamp}.log')
+# 生成带日期的日志文件名
+timestamp = datetime.now().strftime('%Y%m%d')
+global_log_file = os.path.join(log_dir, f'combined_{timestamp}.log')
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(log_file),
-        logging.StreamHandler(sys.stdout)
+        logging.FileHandler(global_log_file, mode='a')  # 只输出到文件，使用追加模式
     ]
 )
 
@@ -85,7 +84,7 @@ def check_task_name_api():
         task_name = data.get('taskName')
 
         if not game_type or not task_name:
-            return jsonify({"is_valid": False, "message": "游戏分类和任务名称不能为空"}), 400
+            return jsonify({"message": "请填写所有必填项！"}), 400
 
         # 检查数据库，确保每个游戏分类下，任务名称不能重名
         db_config = app.config['DB_CONFIG']
@@ -112,103 +111,6 @@ def check_task_name_api():
 
 
     except Exception as e:
-        return jsonify({"is_valid": False, "message": f"An error occurred: {str(e)}"}), 500
-
-@app.route('/create_task', methods=['POST'])
-def create_task_api():
-    """
-    接收前端传递的任务信息，并将相关字段传入 `autoreport_templates` 表，并按照顺序给文件中的 SQL 排序传入 `sql_order` 字段。
-    """
-    try:
-        data = request.get_json()
-        filename = data.get('filename')
-        game_type = data.get('gameType')
-        task_name = data.get('taskName')
-        frequency = data.get('frequency')
-        day_of_month = data.get('dayOfMonth')
-        day_of_week = data.get('dayOfWeek')
-        time = data.get('time')
-
-        if not filename or not game_type or not task_name or not frequency or not time:
-            return jsonify({"message": "请填写所有必填项！"}), 400
-
-        # 文件上传路径
-        upload_dir = 'input_files'
-        os.makedirs(upload_dir, exist_ok=True)
-        file_path = os.path.join(upload_dir, filename)
-
-        # 从 Excel 文件中读取 SQL 语句
-        try:
-            excel_result = check_excel_file(file_path)
-            if not excel_result['is_valid']:
-                return jsonify({"message": f"读取 Excel 文件失败: {excel_result['message']}"}), 500
-            sql_list = excel_result['sql_list']
-        except Exception as e:
-            logging.error(f"读取 Excel 文件失败: {str(e)}", exc_info=True)
-            return jsonify({"message": f"读取 Excel 文件失败: {str(e)}"}), 500
-
-        # 验证 SQL 语句的有效性
-        # 验证 SQL 语句的有效性
-        import sqlparse
-        for sql_dict in sql_list:
-            try:
-                sql = sql_dict['output_sql']
-                logging.info(f"正在校验的 SQL 语句：{sql}")  # 添加详细日志
-                sqlparse.parse(sql)
-            except Exception as e:
-                logging.error(f"SQL 校验失败，sql_dict: {sql_dict}, 错误信息: {str(e)}", exc_info=True)
-                return jsonify({"message": f"SQL 语句无效: {str(e)}"}), 500
-
-        # 将相关字段传入 `autoreport_templates` 表，并按照顺序给文件中的 SQL 排序传入 `sql_order` 字段 
-        db_config = app.config['DB_CONFIG']
-        connection = None  # 初始化 connection 为 None
-        cursor = None
-        try:
-            connection = mysql.connector.connect(**db_config)
-            cursor = connection.cursor()
-
-            # 开始事务
-            connection.start_transaction()
-
-            # 计算 next_run_at
-            next_run_at = calculate_next_run_at(frequency, day_of_month, day_of_week, time)
-            logging.info(f"create_task_api - next_run_at value: {next_run_at}")  # 添加日志
-
-            # 插入 autoreport_tasks 表
-            sql = "INSERT INTO autoreport_tasks (original_filename, gameType, taskName, frequency, dayOfMonth, dayOfWeek, time, last_run_at, last_run_status, last_run_log, next_run_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-            values = (filename, game_type, task_name, frequency, day_of_month, day_of_week, time, None, None, '', next_run_at)
-            cursor.execute(sql, values)
-            task_id = cursor.lastrowid
-
-            # 插入模板信息
-            sql_order = 1
-            for row in excel_result['sql_list']:
-                sql = "INSERT INTO autoreport_templates (task_id, db_name, output_sql, sql_order, transpose) VALUES (%s, %s, %s, %s, %s)"
-                values = (int(task_id), row['db_name'], row['output_sql'], sql_order, False)
-                cursor.execute(sql, values)
-                sql_order += 1
-
-            # 提交事务
-            connection.commit()
-            return jsonify({"message": "任务创建成功！"}), 200
-
-        except Exception as e:
-            if connection and connection.is_connected():
-                connection.rollback()  # 回滚事务
-            logging.error(f"插入 autoreport_templates 失败，当前 sql_statement: {sql_statement}, 错误信息: {str(e)}", exc_info=True)
-            return jsonify({"message": f"数据库操作失败: {str(e)}"}), 500
-
-        finally:
-            # 从 finally 块中移除关闭连接的代码
-            if connection and connection.is_connected():
-                if cursor:
-                    cursor.close()
-            # connection.close()  # 注释掉这行代码
-
-    except Exception as e:
-        if connection and connection.is_connected():
-            connection.rollback()
-        logging.error(f"An error occurred: {str(e)}", exc_info=True)
         return jsonify({"message": f"An error occurred: {str(e)}"}), 500
 
 class TaskScheduler:
@@ -264,36 +166,76 @@ class TaskScheduler:
 
 
     def schedule_task(self, task_info):
-        """安排任务"""
-        job = None
-        logging.info(f"Scheduling task with time: {task_info['time']}") # 打印时间
-        if task_info['frequency'] == 'day':
-            job = self.scheduler.every().day.at(task_info['time'])
-        elif task_info['frequency'] == 'week':
-            if task_info['dayOfWeek']:
-                # schedule库的周几从0开始，0=周一，1=周二，...，6=周日
-                weekday_map = {
-                    1: 0,  # Monday
-                    2: 1,  # Tuesday
-                    3: 2,  # Wednesday
-                    4: 3,  # Thursday
-                    5: 4,  # Friday
-                    6: 5,  # Saturday
-                    7: 6  # Sunday
-                }
-                day_of_week = task_info['dayOfWeek']
-                if day_of_week:
-                    job = getattr(self.scheduler.every(), day_of_week).at(task_info['time'])
-        elif task_info['frequency'] == 'month':
-            if task_info['dayOfMonth']:
-                # job = self.scheduler.every(int(task_info['dayOfMonth'])).days.at(task_info['time'])
-                if 1 <= int(task_info['dayOfMonth']) <= 31:
-                    job = self.scheduler.every().days.at(task_info['time'])
+        """根据任务信息安排定时任务"""
+        try:
+            logging.info(f"Scheduling task with time: {task_info['time']}")
+            
+            frequency = task_info['frequency']
+            day_of_month = task_info['dayOfMonth']
+            day_of_week = task_info['dayOfWeek']
+            
+            # 将数字形式的星期几转换为英文名称 (1-7 对应 周一-周日)
+            weekday_mapping = {
+                '1': 'monday',
+                '2': 'tuesday',
+                '3': 'wednesday',
+                '4': 'thursday',
+                '5': 'friday',
+                '6': 'saturday',
+                '7': 'sunday'
+            }
+            
+            # 根据频率安排任务
+            if frequency == 'day':
+                job = self.scheduler.every().day.at(task_info['time'])
+            elif frequency == 'week' and day_of_week:
+                # 将数字转换为英文星期几名称
+                if day_of_week in weekday_mapping:
+                    day_of_week_name = weekday_mapping[day_of_week]
+                    job = getattr(self.scheduler.every(), day_of_week_name).at(task_info['time'])
                 else:
-                    logging.error(f"Invalid dayOfMonth: {task_info['dayOfMonth']}")
-                    job = None  # 或者抛出异常，取决于你希望如何处理无效的日期
-        if job is not None:
+                    logging.error(f"无效的星期几值: {day_of_week}")
+                    return None
+            elif frequency == 'month' and day_of_month:
+                # 月度任务处理逻辑
+                try:
+                    # 确保day_of_month是有效的数字
+                    day = int(day_of_month)
+                    if 1 <= day <= 31:
+                        # schedule库不直接支持每月特定日期，需要自定义处理
+                        # 使用每天运行，但在任务执行前检查是否是指定的日期
+                        job = self.scheduler.every().day.at(task_info['time'])
+                        
+                        # 保存原始的day_of_month到job的标签中，以便后续检查
+                        job.tag(f"monthly-{day}")
+                        
+                        # 修改job的执行函数，添加日期检查
+                        original_job_func = job.job_func
+                        
+                        def monthly_job_wrapper():
+                            # 检查今天是否是指定的月份日期
+                            today = datetime.now()
+                            if today.day == day:
+                                return original_job_func()
+                            return None
+                        
+                        job.job_func = monthly_job_wrapper
+                    else:
+                        logging.error(f"无效的月份日期: {day_of_month}")
+                        return None
+                except ValueError:
+                    logging.error(f"无效的月份日期格式: {day_of_month}")
+                    return None
+            else:
+                logging.error(f"无效的频率设置: {frequency}")
+                return None
+            
+            # 设置任务回调
             job.do(self.run_task, task_info)
+
+        except Exception as e:
+            logging.error(f"安排任务失败: {e}")
+            return None
 
     def run_task(self, task_info):
         """运行任务"""
@@ -421,12 +363,18 @@ class TaskScheduler:
 
 def calculate_next_run_at(frequency, day_of_month, day_of_week, time):
     """计算下一次执行的时间"""
+    logging.info("calculate_next_run_at 函数被调用")
     logging.info(f"calculate_next_run_at called with: frequency={frequency}, day_of_month={day_of_month}, day_of_week={day_of_week}, time={time}")
     now = datetime.now()
+    logging.info(f"当前时间: {now}")  # 添加当前时间日志
     if frequency == 'day':
+        logging.info(f"frequency == 'day', now.date() = {now.date()}, time = {time}")
         next_run_at = datetime.combine(now.date(), datetime.strptime(time, '%H:%M').time())
+        logging.info(f"frequency == 'day', next_run_at = {next_run_at}")
         if next_run_at <= now:
+            logging.info(f"frequency == 'day', next_run_at <= now, next_run_at = {next_run_at}, now = {now}")
             next_run_at += timedelta(days=1)
+        logging.info(f"frequency == 'day', 最终 next_run_at = {next_run_at}")  # 添加最终结果日志
     elif frequency == 'week':
         if day_of_week:
             weekday_map = {
@@ -439,15 +387,18 @@ def calculate_next_run_at(frequency, day_of_month, day_of_week, time):
                 7: 6  # Sunday
             }
             day_of_week = weekday_map.get(int(day_of_week))
+            logging.info(f"星期几 (0-6): {day_of_week}")  # 添加星期几日志
             days_ahead = day_of_week - now.weekday()
             if days_ahead <= 0:  # Target day is today or in the past
                 days_ahead += 7
             next_run_at = now + timedelta(days=days_ahead)
             next_run_at = datetime.combine(next_run_at.date(), datetime.strptime(time, '%H:%M').time())
+        logging.info(f"frequency == 'week', 最终 next_run_at = {next_run_at}")  # 添加最终结果日志
     elif frequency == 'month':
         if day_of_month:
             try:
                 day_of_month = int(day_of_month)
+                logging.info(f"月份日期: {day_of_month}")  # 添加月份日期日志
                 next_run_at = datetime(now.year, now.month, day_of_month, int(time[:2]), int(time[3:]))
                 if next_run_at <= now:
                     month = now.month + 1
@@ -458,9 +409,25 @@ def calculate_next_run_at(frequency, day_of_month, day_of_week, time):
                     next_run_at = datetime(year, month, day_of_month, int(time[:2]), int(time[3:]))
             except ValueError:
                 # Handle invalid day_of_month
-                next_run_at = None
+                # 获取当月的最后一天
+                import calendar
+                last_day = calendar.monthrange(now.year, now.month)[1]
+                day_of_month = last_day
+                next_run_at = datetime(now.year, now.month, day_of_month, int(time[:2]), int(time[3:]))
+                if next_run_at <= now:
+                    month = now.month + 1
+                    year = now.year
+                    if month > 12:
+                        month = 1
+                        year += 1
+                    # 再次获取下个月的最后一天
+                    last_day = calendar.monthrange(year, month)[1]
+                    day_of_month = last_day
+                    next_run_at = datetime(year, month, day_of_month, int(time[:2]), int(time[3:]))
+        logging.info(f"frequency == 'month', 最终 next_run_at = {next_run_at}")  # 添加最终结果日志
     else:
         next_run_at = None
 
     logging.info(f"calculate_next_run_at returning: {next_run_at}")
+    
     return next_run_at

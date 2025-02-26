@@ -17,7 +17,7 @@ load_dotenv(dotenv_path=dotenv_path)
 
 from backend.config import OUTPUT_DIR, DB_CONFIG
 from backend.report_task import ReportTask
-from backend.task_scheduler import TaskScheduler  # 导入 TaskScheduler
+from backend.task_scheduler import TaskScheduler, calculate_next_run_at  # 导入 TaskScheduler
 from backend.tools.excel_utils import check_excel_file
 from backend.utils import connect_db, execute_query
 import sqlparse
@@ -144,6 +144,7 @@ def create_task_api():
     接收前端传递的任务信息，并将相关字段传入 `autoreport_templates` 表，并按照顺序给文件中的 SQL 排序传入 `sql_order` 字段。
     """
     try:
+        logging.info("【report_api.py】的create_task_api被调用")
         data = request.get_json()
         filename = data.get('filename')
         game_type = data.get('gameType')
@@ -156,9 +157,15 @@ def create_task_api():
         if not filename or not game_type or not task_name or not frequency or not time:
             return jsonify({"message": "请填写所有必填项！"}), 400
 
+        # 计算 next_run_at
+        next_run_at = calculate_next_run_at(frequency, day_of_month, day_of_week, time)
+        print(f"计算得到的 next_run_at: {next_run_at}")
+        
+        if next_run_at is None:
+            print("计算next_run_at失败!")
+            return jsonify({"message": "计算下次运行时间失败"}), 500
+
         # 文件上传路径
-        # upload_dir = 'input_files'
-        # os.makedirs(upload_dir, exist_ok=True)
         file_path = os.path.join(TEMPLATES_FOLDER, data['uuidFileName'])
 
         # 从 Excel 文件中读取 SQL 语句
@@ -172,12 +179,11 @@ def create_task_api():
             return jsonify({"message": f"读取 Excel 文件失败: {str(e)}"}), 500
 
         # 验证 SQL 语句的有效性
-        # 验证 SQL 语句的有效性
         import sqlparse
         for sql_dict in sql_list:
             try:
                 sql = sql_dict['output_sql']
-                logging.info(f"正在校验的 SQL 语句：{sql}")  # 添加详细日志
+                logging.info(f"正在校验的 SQL 语句：{sql}")
                 sqlparse.parse(sql)
             except Exception as e:
                 logging.error(f"SQL 校验失败，sql_dict: {sql_dict}, 错误信息: {str(e)}", exc_info=True)
@@ -185,9 +191,9 @@ def create_task_api():
 
         # 将相关字段传入 `autoreport_templates` 表，并按照顺序给文件中的 SQL 排序传入 `sql_order` 字段
         db_config = app.config['DB_CONFIG']
-        connection = None  # 初始化 connection 为 None
+        connection = None
         cursor = None
-        sql_statement = None # 初始化
+        sql_statement = None
         try:
             connection = mysql.connector.connect(**db_config)
             cursor = connection.cursor()
@@ -195,17 +201,24 @@ def create_task_api():
             # 开始事务
             connection.start_transaction()
 
-            # 插入 autoreport_tasks 表
-            # 插入 autoreport_tasks 表
-            sql = "INSERT INTO autoreport_tasks (gameType, taskName, frequency, dayOfMonth, dayOfWeek, `time`) VALUES (%s, %s, %s, %s, %s, %s)"
+            # 插入 autoreport_tasks 表，包含 next_run_at 字段
+            sql = """
+                INSERT INTO autoreport_tasks 
+                (gameType, taskName, frequency, dayOfMonth, dayOfWeek, `time`, next_run_at) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """
             values = (
                 game_type,
                 task_name,
                 frequency,
                 day_of_month if day_of_month else None,
                 day_of_week if day_of_week else None,
-                time
+                time,
+                next_run_at  # 添加 next_run_at 值
             )
+            print(f"执行SQL: {sql}")
+            print(f"SQL参数: {values}")
+            
             cursor.execute(sql, values)
             task_id = cursor.lastrowid
 
@@ -219,6 +232,7 @@ def create_task_api():
 
             # 提交事务
             connection.commit()
+            print(f"数据库插入成功，任务ID: {task_id}")
 
             # 重新加载任务
             task_scheduler.load_tasks()
@@ -232,14 +246,12 @@ def create_task_api():
             return jsonify({"message": f"数据库操作失败: {str(e)}"}), 500
 
         finally:
-            # 从 finally 块中移除关闭连接的代码
             if connection and connection.is_connected():
                 if cursor:
                     cursor.close()
-            # connection.close()  # 注释掉这行代码
 
     except Exception as e:
-        connection = None # 确保连接未建立时也能回滚
+        connection = None
         logging.error(f"An error occurred: {str(e)}", exc_info=True)
         return jsonify({"message": f"An error occurred: {str(e)}"}), 500
 
@@ -348,6 +360,7 @@ def allowed_file(filename):
 @app.route('/upload_vars', methods=['POST'])
 def upload_vars():
     print("Request headers:", request.headers) # 打印请求头
+    logging.info("report_api.py - upload_vars 函数被调用")
     if 'file' not in request.files:
         print("No file part in request.files")
         return jsonify({'error': 'No file part'}), 400

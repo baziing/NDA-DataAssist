@@ -348,6 +348,21 @@ export default {
             .then(data => {
               this.$message.success(data.message || '任务创建成功！')
               this.taskProgress += `${this.getFormattedTimestamp()} - 创建成功。\n`
+
+              // 获取 task_id 和 next_run_at
+              this.$message.success(data.message || '任务创建成功！')
+              this.taskProgress += `${this.getFormattedTimestamp()} - 创建成功。\n`
+
+              // 获取 task_id 和 next_run_at
+              const nextRunAt = data.next_run_at
+
+              // 显式地将 next_run_at 赋值给一个变量并打印
+              const nextRunAtValue = data.next_run_at
+              console.log('Next run at value:', nextRunAtValue)
+
+              // 在控制台输出 next_run_at 的值
+              console.log('Next run at:', nextRunAt)
+
               // 清空表单
               this.clearForm()
               // 触发事件

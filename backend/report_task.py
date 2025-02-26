@@ -5,21 +5,21 @@ import time
 import logging
 from datetime import datetime
 from .report_generator_v2 import generate_report
+try:
+    from backend.task_scheduler import global_log_file
+except ImportError:
+    global_log_file = os.path.join('logs', 'combined.log')
 
 # 配置日志
 log_dir = 'logs'
 os.makedirs(log_dir, exist_ok=True)
-
-# 生成带时间戳的日志文件名
-timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-log_file = os.path.join(log_dir, f'report_task_{timestamp}.log')
 
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,  # 保留INFO级别日志
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(log_file),
+        logging.FileHandler(global_log_file, mode='a'),
         logging.StreamHandler(sys.stdout)
     ]
 )
