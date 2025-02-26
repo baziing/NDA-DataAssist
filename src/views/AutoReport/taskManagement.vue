@@ -247,7 +247,11 @@ export default {
         time: '',
         dayOfWeek: '',
         dayOfMonth: ''
-      }
+      },
+      sortParams: [
+        { field: 'last_run_at', order: 'desc' },
+        { field: 'updated_at', order: 'desc' }
+      ]
     }
   },
   created() {
@@ -263,7 +267,9 @@ export default {
         taskName: this.searchForm.taskName,
         frequency: this.searchForm.frequency,
         dayOfWeek: this.searchForm.dayOfWeek,
-        dayOfMonth: this.searchForm.dayOfMonth
+        dayOfMonth: this.searchForm.dayOfMonth,
+        sortBy: this.sortParams.map(p => p.field).join(','),
+        sortOrder: this.sortParams.map(p => p.order).join(',')
       }
 
       // 构建查询字符串
