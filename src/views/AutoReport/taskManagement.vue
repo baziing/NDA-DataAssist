@@ -566,7 +566,10 @@ export default {
 
     // 编辑任务
     handleEdit(row) {
-      this.editForm = { ...row, isEnabled: row.isEnabled !== false }
+      this.editForm = {
+        ...row,
+        isEnabled: row.is_enabled === 1 || row.is_enabled === true
+      }
       this.originalTaskName = row.taskName
       this.editDialogVisible = true
     },
@@ -671,10 +674,15 @@ export default {
 
     // 更新任务
     updateTask(taskId) {
+      const updateData = {
+        ...this.editForm,
+        is_enabled: this.editForm.isEnabled ? 1 : 0 // 转换为后端期望的格式
+      }
+
       fetch(`http://localhost:5002/task_management/task/${taskId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(this.editForm)
+        body: JSON.stringify(updateData)
       })
         .then(response => {
           if (!response.ok) {
