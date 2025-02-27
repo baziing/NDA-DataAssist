@@ -227,6 +227,13 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-form-item label="开启调度" prop="isEnabled">
+          <el-switch
+            v-model="editForm.isEnabled"
+            active-color="#13ce66"
+            inactive-color="#ff4949"
+          />
+        </el-form-item>
       </el-form>
       <span slot="footer" class="dialog-footer">
         <el-button type="primary" :loading="updating" @click="submitEditForm">更 新</el-button>
@@ -358,7 +365,8 @@ export default {
         frequency: '',
         time: '',
         dayOfWeek: '',
-        dayOfMonth: ''
+        dayOfMonth: '',
+        isEnabled: true
       },
       sortParams: [
         { field: 'last_run_at', order: 'desc' },
@@ -558,8 +566,8 @@ export default {
 
     // 编辑任务
     handleEdit(row) {
-      this.editForm = { ...row } // 复制任务信息到编辑表单
-      this.originalTaskName = row.taskName // 保存原始任务名
+      this.editForm = { ...row, isEnabled: row.isEnabled !== false }
+      this.originalTaskName = row.taskName
       this.editDialogVisible = true
     },
 

@@ -144,7 +144,8 @@ class TaskScheduler:
             if self.connection is None or not self.connection.is_connected():
                 self.connection = connect_db()
             cursor = self.connection.cursor(dictionary=True)
-            cursor.execute("SELECT * FROM autoreport_tasks")
+            # 修改SQL查询，只加载启用的任务
+            cursor.execute("SELECT * FROM autoreport_tasks WHERE is_enabled = TRUE")
             tasks = cursor.fetchall()
             for task in tasks:
                 try:
