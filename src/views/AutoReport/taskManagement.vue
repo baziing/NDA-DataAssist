@@ -94,7 +94,7 @@
         />
         <el-table-column label="操作" width="350">
           <template slot-scope="scope">
-            <el-button size="mini">下载报表</el-button>
+            <el-button size="mini" @click="handleDownloadReport(scope.row)">下载报表</el-button>
             <el-button size="mini" @click="handleViewSql(scope.row)">查看 SQL</el-button>
             <el-button size="mini" @click="handleEdit(scope.row)">编辑</el-button>
             <el-button size="mini" type="danger" @click="handleDelete(scope.row)">删除</el-button>
@@ -233,11 +233,105 @@
         <el-button :disabled="updating" @click="handleCancel">取 消</el-button>
       </span>
     </el-dialog>
+    <el-dialog
+      title="任务详情"
+      :visible.sync="taskDetailVisible"
+      width="80%"
+    >
+      <el-tabs v-model="activeTab">
+        <el-tab-pane label="基本信息" name="info">
+          <!-- 现有的任务信息内容 -->
+        </el-tab-pane>
+        <el-tab-pane label="SQL信息" name="sql">
+          <!-- 现有的SQL信息内容 -->
+        </el-tab-pane>
+        <el-tab-pane label="生成文件" name="files">
+          <el-table
+            v-loading="filesLoading"
+            :data="taskFiles"
+            style="width: 100%"
+          >
+            <el-table-column
+              prop="filename"
+              label="文件名"
+              min-width="300"
+            >
+              <template slot-scope="scope">
+                <el-link
+                  type="primary"
+                  @click="downloadFile(scope.row.filename)"
+                >
+                  {{ scope.row.filename }}
+                </el-link>
+              </template>
+            </el-table-column>
+            <el-table-column
+              prop="created_at"
+              label="生成时间"
+              width="180"
+            />
+            <el-table-column
+              prop="size"
+              label="文件大小"
+              width="120"
+            >
+              <template slot-scope="scope">
+                {{ formatFileSize(scope.row.size) }}
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-tab-pane>
+      </el-tabs>
+    </el-dialog>
+    <el-dialog
+      title="下载报表"
+      :visible.sync="downloadDialogVisible"
+      width="60%"
+    >
+      <el-table
+        v-loading="filesLoading"
+        :data="taskFiles"
+        style="width: 100%"
+      >
+        <el-table-column
+          prop="filename"
+          label="文件名"
+          min-width="300"
+        >
+          <template slot-scope="scope">
+            <el-link
+              type="primary"
+              @click="downloadFile(scope.row.filename)"
+            >
+              {{ scope.row.filename }}
+            </el-link>
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="created_at"
+          label="生成时间"
+          width="180"
+        />
+        <el-table-column
+          prop="size"
+          label="文件大小"
+          width="120"
+        >
+          <template slot-scope="scope">
+            {{ formatFileSize(scope.row.size) }}
+          </template>
+        </el-table-column>
+      </el-table>
+      <span slot="footer" class="dialog-footer">
+        <el-button @click="downloadDialogVisible = false">关闭</el-button>
+      </span>
+    </el-dialog>
   </div>
 </template>
 
 <script>
 import moment from 'moment'
+import axios from 'axios'
 
 export default {
   name: 'TaskManagement',
@@ -277,7 +371,13 @@ export default {
           { required: true, message: '请输入任务名称', trigger: 'blur' },
           { validator: this.validateTaskNameRule, trigger: 'blur' }
         ]
-      }
+      },
+      taskDetailVisible: false,
+      activeTab: 'info',
+      taskFiles: [],
+      filesLoading: false,
+      downloadDialogVisible: false,
+      currentTask: null
     }
   },
   created() {
@@ -682,6 +782,81 @@ export default {
     },
     handleSortChange(column, prop, order) {
       this.fetchTasks(prop, order)
+    },
+    // 查看任务详情
+    viewTaskDetail(row) {
+      this.currentTask = row
+      this.taskDetailVisible = true
+      this.activeTab = 'info'
+
+      // 加载SQL信息
+      this.loadTaskSql(row.id)
+
+      // 加载文件列表
+      this.loadTaskFiles(row.id)
+    },
+
+    // 加载任务文件列表
+    loadTaskFiles(taskId) {
+      this.filesLoading = true
+      this.taskFiles = []
+
+      console.log(`正在加载任务 ${taskId} 的文件列表`)
+
+      axios.get(`/task_management/task_files/${taskId}`)
+        .then(response => {
+          console.log('获取文件列表成功:', response.data)
+          this.taskFiles = response.data
+          if (this.taskFiles.length === 0) {
+            this.$message.info('该任务暂无生成的报表文件')
+          }
+        })
+        .catch(error => {
+          console.error('获取文件列表失败:', error)
+          this.$message.error(`获取文件列表失败: ${error.message || '未知错误'}`)
+        })
+        .finally(() => {
+          this.filesLoading = false
+        })
+    },
+
+    // 下载文件
+    downloadFile(filename) {
+      const taskId = this.currentTask.id
+      console.log(`正在下载文件: ${filename}, 任务ID: ${taskId}`)
+
+      // 使用完整的URL
+      const baseUrl = process.env.VUE_APP_BASE_API || 'http://localhost:5002'
+      const url = `${baseUrl}/task_management/download_file/${taskId}/${encodeURIComponent(filename)}`
+      console.log('下载URL:', url)
+
+      // 在新窗口中打开下载链接
+      try {
+        window.open(url, '_blank')
+      } catch (error) {
+        console.error('下载失败:', error)
+        this.$message.error(`下载失败: ${error.message || '未知错误'}`)
+      }
+    },
+
+    // 格式化文件大小
+    formatFileSize(size) {
+      if (size < 1024) {
+        return size + ' B'
+      } else if (size < 1024 * 1024) {
+        return (size / 1024).toFixed(2) + ' KB'
+      } else if (size < 1024 * 1024 * 1024) {
+        return (size / (1024 * 1024)).toFixed(2) + ' MB'
+      } else {
+        return (size / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+      }
+    },
+
+    // 处理下载报表按钮点击
+    handleDownloadReport(row) {
+      this.currentTask = row
+      this.downloadDialogVisible = true
+      this.loadTaskFiles(row.id)
     }
   }
 }

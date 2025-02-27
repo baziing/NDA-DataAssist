@@ -299,8 +299,13 @@ class TaskScheduler:
                     logging.info(f"Task Progress: {data['progress']}%, Log: {data['log']}")
 
             task = MockTask(task_data['taskName'])
-            # 调用 generate_report 函数
-            output_path = generate_report(task, task_info, data_frame=df, variables_filename=None)
+            
+            # 创建任务专属目录
+            output_dir = os.path.join('output', 'report_scheduler', str(task_id))
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # 调用 generate_report 函数，指定输出目录
+            output_path = generate_report(task, task_info, data_frame=df, variables_filename=None, output_dir=output_dir)
 
             if output_path is None:
                 logging.error(f"任务 {task_info['taskName']} 执行完成，但报表路径为空")

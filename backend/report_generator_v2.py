@@ -29,7 +29,7 @@ def cleanup_old_files(directory, days=7):
                 except Exception as e:
                     logging.error(f'删除文件失败: {filename}, 错误: {e}')
 
-def generate_report(task, task_info, data_frame=None, input_file=None, variables_filename=None, output_file=None):
+def generate_report(task, task_info, data_frame=None, input_file=None, variables_filename=None, output_file=None, output_dir=None):
     """
     生成报表
     """
@@ -45,11 +45,17 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
             task.update_progress({'progress': 5, 'log': '读取输入文件'})
         else:
             df = data_frame
-        # 获取当前日期作为目录
-        date_str = datetime.now().strftime('%Y%m%d')
-        # 创建日期目录
-        output_subdir = os.path.join('output', 'report-manual', date_str)
-        ensure_dir_exists(output_subdir)
+            
+        # 如果提供了输出目录，使用它；否则使用默认目录
+        if output_dir:
+            # 确保目录存在
+            ensure_dir_exists(output_dir)
+        else:
+            # 获取当前日期作为目录
+            date_str = datetime.now().strftime('%Y%m%d')
+            # 创建日期目录
+            output_dir = os.path.join('output', 'report-manual', date_str)
+            ensure_dir_exists(output_dir)
 
         # 读取变量文件（如果存在）
         variables = {}
@@ -441,7 +447,7 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
             wb.remove(wb[sheet_name])
     
         # 保存文件
-        output_path = os.path.join(output_subdir, output_file)
+        output_path = os.path.join(output_dir, output_file)
         logging.info(f'报表生成路径: {os.path.abspath(output_path)}') # 打印绝对路径
         wb.save(output_path)
         task.update_progress({'progress':100, 'log':'保存文件'}) # 保存文件后：更新 100%

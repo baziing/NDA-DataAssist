@@ -1,7 +1,8 @@
 import logging
 from datetime import datetime
 import mysql.connector
-from flask import request, jsonify
+from flask import request, jsonify, send_file, Response, send_from_directory
+import os
 
 from backend.config import DB_CONFIG
 from backend.task_scheduler import calculate_next_run_at
@@ -308,3 +309,113 @@ def register_task_management_routes(app, task_scheduler):
                 connection.rollback()
             logging.error(f"批量删除任务失败: {str(e)}", exc_info=True)
             return jsonify({"message": f"批量删除任务失败: {str(e)}"}), 500
+
+    @app.route('/task_management/task_files/<string:task_id>', methods=['GET'])
+    def get_task_files(task_id):
+        """获取指定任务生成的文件列表"""
+        try:
+            # 尝试多个可能的路径
+            possible_paths = [
+                os.path.abspath(os.path.join('output', 'report_scheduler', str(task_id))),
+                os.path.abspath(os.path.join('output', 'report-scheduler', str(task_id))),
+                os.path.abspath(os.path.join('output', 'report_scheduler', task_id)),
+            ]
+            
+            files = []
+            found_dir = None
+            
+            for path in possible_paths:
+                logging.info(f"尝试查找目录: {path}")
+                if os.path.exists(path) and os.path.isdir(path):
+                    found_dir = path
+                    logging.info(f"找到目录: {path}")
+                    
+                    for filename in os.listdir(path):
+                        file_path = os.path.join(path, filename)
+                        if os.path.isfile(file_path):
+                            # 获取文件信息
+                            file_stats = os.stat(file_path)
+                            created_time = datetime.fromtimestamp(file_stats.st_ctime).strftime('%Y-%m-%d %H:%M:%S')
+                            
+                            files.append({
+                                'filename': filename,
+                                'created_at': created_time,
+                                'size': file_stats.st_size
+                            })
+                    
+                    break
+            
+            if not found_dir:
+                logging.warning(f"未找到任务 {task_id} 的目录，尝试过的路径: {possible_paths}")
+                return jsonify([]), 200
+            
+            logging.info(f"在 {found_dir} 中找到 {len(files)} 个文件")
+            
+            # 按创建时间倒序排序
+            files.sort(key=lambda x: x['created_at'], reverse=True)
+            
+            return jsonify(files), 200
+            
+        except Exception as e:
+            logging.error(f"获取任务文件列表失败: {str(e)}", exc_info=True)
+            return jsonify({'error': f'获取任务文件列表失败: {str(e)}'}), 500
+
+    @app.route('/task_management/download_file/<string:task_id>/<path:filename>', methods=['GET'])
+    def download_task_file(task_id, filename):
+        """下载指定任务的文件"""
+        try:
+            logging.info(f"尝试下载文件: {filename}, 任务ID: {task_id}")
+            
+            # 构建基本目录路径
+            base_dir = os.path.abspath(os.path.join('output', 'report_scheduler', str(task_id)))
+            logging.info(f"基本目录路径: {base_dir}")
+            
+            # 检查目录是否存在
+            if not os.path.exists(base_dir):
+                logging.error(f"目录不存在: {base_dir}")
+                return jsonify({'error': f'目录不存在: {base_dir}'}), 404
+            
+            # 检查文件是否存在
+            file_path = os.path.join(base_dir, filename)
+            logging.info(f"完整文件路径: {file_path}")
+            
+            if not os.path.exists(file_path):
+                logging.error(f"文件不存在: {file_path}")
+                return jsonify({'error': f'文件不存在: {file_path}'}), 404
+            
+            # 尝试使用send_from_directory
+            try:
+                logging.info(f"尝试使用send_from_directory发送文件")
+                return send_from_directory(
+                    base_dir,
+                    filename,
+                    as_attachment=True
+                )
+            except Exception as e:
+                logging.error(f"send_from_directory失败: {str(e)}", exc_info=True)
+            
+            # 如果send_from_directory失败，尝试直接读取文件
+            try:
+                logging.info(f"尝试直接读取文件并返回")
+                with open(file_path, 'rb') as f:
+                    file_data = f.read()
+                
+                response = Response(
+                    file_data,
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+                        if filename.endswith('.xlsx') else 'application/octet-stream',
+                    headers={
+                        'Content-Disposition': f'attachment; filename="{filename}"; filename*=UTF-8\'\'{filename}',
+                        'Content-Length': str(os.path.getsize(file_path))
+                    }
+                )
+                
+                return response
+                
+            except Exception as e:
+                logging.error(f"直接读取文件失败: {str(e)}", exc_info=True)
+                return jsonify({'error': f'读取文件失败: {str(e)}'}), 500
+            
+        except Exception as e:
+            logging.error(f"下载文件处理失败: {str(e)}", exc_info=True)
+            return jsonify({'error': f'下载文件处理失败: {str(e)}'}), 500
