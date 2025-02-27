@@ -121,33 +121,38 @@
     >
       <el-table
         :data="sqlData"
+        class="sql-info-table"
         style="width: 100%"
       >
         <el-table-column
           prop="db_name"
           label="db_name"
-          width="180"
+          width="120"
         />
         <el-table-column
           prop="output_sql"
           label="output_sql"
-          width="180"
+          width="400"
         />
         <el-table-column
           prop="format"
           label="format"
-          width="180"
+          width="300"
         />
         <el-table-column
           prop="pos"
           label="pos"
-          width="180"
+          width="100"
         />
         <el-table-column
           prop="transpose"
           label="transpose(Y/N)"
-          width="180"
-        />
+          width="150"
+        >
+          <template slot-scope="scope">
+            {{ scope.row.transpose === 1 ? 'Y' : (scope.row.transpose === 0 ? 'N' : scope.row.transpose) }}
+          </template>
+        </el-table-column>
       </el-table>
       <span slot="footer" class="dialog-footer">
         <el-button @click="dialogVisible = false">确 定</el-button>
@@ -217,6 +222,7 @@
                 placeholder="选择时间"
                 format="HH:mm"
                 value-format="HH:mm"
+                class="execution-time-picker"
               />
             </el-form-item>
           </el-col>
@@ -681,11 +687,39 @@ export default {
 }
 </script>
 
+<style>
+/* 使用全局样式覆盖表格样式 */
+.sql-info-table .el-table td,
+.sql-info-table .el-table th.is-leaf {
+  border-right: none;
+}
+
+.sql-info-table .el-table::before {
+  height: 0;
+}
+
+.sql-info-table .el-table__fixed-right::before,
+.sql-info-table .el-table__fixed::before {
+  height: 0;
+}
+
+.sql-info-table .el-table--border::after,
+.sql-info-table .el-table--group::after,
+.sql-info-table .el-table::after {
+  width: 0;
+}
+</style>
+
 <style scoped>
 .form-tip {
   font-size: 12px;
   color: #909399;
   line-height: 1.2;
   padding-top: 4px;
+}
+
+/* 调整执行时间选择器的宽度 */
+.execution-time-picker {
+  width: 197px; /* 调整为与执行周期选择框相同的宽度 */
 }
 </style>
