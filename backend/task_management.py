@@ -131,7 +131,7 @@ def register_task_management_routes(app, task_scheduler):
         """获取指定任务的信息"""
         try:
             # 连接数据库
-            connection = mysql.connector.connect(**DB_CONFIG)
+            connection = mysql.connector.connect( **DB_CONFIG)
             cursor = connection.cursor(dictionary=True)
             
             # 查询任务信息
@@ -275,13 +275,15 @@ def register_task_management_routes(app, task_scheduler):
             task_ids = [str(task_id) for task_id in task_ids]
             
             # 连接数据库
-            connection = mysql.connector.connect(**DB_CONFIG)
-            cursor = connection.cursor()
+            try:
+                connection = mysql.connector.connect(**DB_CONFIG)
+                cursor = connection.cursor()
+                logging.info("更新任务 - 数据库连接成功")
+            except Exception as e:
+                logging.error(f"更新任务 - 数据库连接失败: {str(e)}", exc_info=True)
+                return jsonify({"message": f"数据库连接失败: {str(e)}"}), 500
             
-            # 开始事务
-            connection.start_transaction()
-            
-            # 构建IN子句的参数占位符
+            # 更新任务信息
             placeholders = ', '.join(['%s'] * len(task_ids))
             
             # 删除任务相关的SQL模板

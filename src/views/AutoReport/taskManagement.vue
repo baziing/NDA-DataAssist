@@ -494,7 +494,11 @@ export default {
     formatDateTime(row, column) {
       const date = row[column.property]
       if (date) {
-        return moment(date).format('YYYY-MM-DD HH:mm')
+        console.log('原始时间:', date)
+        // 将时间转换为西八区 (-8 时区)
+        const formattedDate = moment(date).utcOffset(0).format('YYYY-MM-DD HH:mm')
+        console.log('格式化后的时间:', formattedDate)
+        return formattedDate
       } else {
         return ''
       }
