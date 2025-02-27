@@ -64,7 +64,10 @@
         />
         <el-table-column prop="last_run_status" label="最近执行状态" width="120">
           <template slot-scope="scope">
-            <el-tooltip v-if="scope.row.last_run_status === 'failure'" :content="scope.row.last_run_log" placement="top">
+            <el-tooltip v-if="scope.row.is_enabled === 0 || scope.row.is_enabled === false" content="任务调度已关闭" placement="top">
+              <el-tag type="info">未调度</el-tag>
+            </el-tooltip>
+            <el-tooltip v-else-if="scope.row.last_run_status === 'failure'" :content="scope.row.last_run_log" placement="top">
               <el-tag type="danger">Failure</el-tag>
             </el-tooltip>
             <el-tag v-else-if="scope.row.last_run_status === 'success'" type="success">Success</el-tag>
@@ -75,7 +78,7 @@
           prop="next_run_at"
           label="下次执行"
           width="150"
-          :formatter="formatDateTime"
+          :formatter="formatNextRunTime"
           sortable
         />
         <el-table-column
@@ -566,6 +569,7 @@ export default {
 
     // 编辑任务
     handleEdit(row) {
+      this.currentTask = row // 保存当前编辑的任务
       this.editForm = {
         ...row,
         isEnabled: row.is_enabled === 1 || row.is_enabled === true
@@ -677,6 +681,13 @@ export default {
       const updateData = {
         ...this.editForm,
         is_enabled: this.editForm.isEnabled ? 1 : 0 // 转换为后端期望的格式
+      }
+
+      // 如果调度状态发生了变化，需要特殊处理
+      const originalEnabled = this.currentTask ? (this.currentTask.is_enabled === 1 || this.currentTask.is_enabled === true) : null
+      if (originalEnabled !== null && originalEnabled !== this.editForm.isEnabled) {
+        // 添加标记，告诉后端需要重新计算下次执行时间
+        updateData.recalculate_next_run = true
       }
 
       fetch(`http://localhost:5002/task_management/task/${taskId}`, {
@@ -877,6 +888,22 @@ export default {
       this.currentTask = row
       this.downloadDialogVisible = true
       this.loadTaskFiles(row.id)
+    },
+
+    // 格式化下次执行时间
+    formatNextRunTime(row, column) {
+      // 如果调度已关闭，显示为空
+      if (row.is_enabled === 0 || row.is_enabled === false) {
+        return '-'
+      }
+
+      // 否则使用原来的日期格式化逻辑
+      const date = row[column.property]
+      if (date) {
+        return moment(date).utcOffset(0).format('YYYY-MM-DD HH:mm')
+      } else {
+        return ''
+      }
     }
   }
 }

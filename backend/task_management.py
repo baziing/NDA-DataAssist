@@ -176,20 +176,31 @@ def register_task_management_routes(app, task_scheduler):
             if not game_type or not task_name or not frequency or not time:
                 return jsonify({"message": "请填写所有必填项！"}), 400
             
-            # 计算新的next_run_at
-            next_run_at = calculate_next_run_at(frequency, day_of_month, day_of_week, time)
-            logging.info(f"更新任务 - 计算出的 next_run_at: {next_run_at}")
-            if next_run_at is None:
-                return jsonify({"message": "计算下次运行时间失败"}), 500
+            # 连接数据库获取当前任务状态
+            connection = mysql.connector.connect(**DB_CONFIG)
+            cursor = connection.cursor(dictionary=True)
             
-            # 连接数据库
-            try:
-                connection = mysql.connector.connect(**DB_CONFIG)
-                cursor = connection.cursor()
-                logging.info("更新任务 - 数据库连接成功")
-            except Exception as e:
-                logging.error(f"更新任务 - 数据库连接失败: {str(e)}", exc_info=True)
-                return jsonify({"message": f"数据库连接失败: {str(e)}"}), 500
+            # 查询当前任务状态
+            cursor.execute("SELECT is_enabled FROM autoreport_tasks WHERE id = %s", (task_id,))
+            current_task = cursor.fetchone()
+            
+            if not current_task:
+                cursor.close()
+                connection.close()
+                return jsonify({"message": "任务不存在"}), 404
+            
+            # 检查调度状态是否变化
+            is_enabled_changed = current_task['is_enabled'] != (1 if is_enabled else 0)
+            
+            # 计算新的next_run_at
+            next_run_at = None
+            if is_enabled:  # 只有在启用状态下才计算下次运行时间
+                next_run_at = calculate_next_run_at(frequency, day_of_month, day_of_week, time)
+                logging.info(f"更新任务 - 计算出的 next_run_at: {next_run_at}")
+                if next_run_at is None and is_enabled:
+                    cursor.close()
+                    connection.close()
+                    return jsonify({"message": "计算下次运行时间失败"}), 500
             
             # 更新任务信息
             sql = """
