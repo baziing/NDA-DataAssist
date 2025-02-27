@@ -157,6 +157,8 @@
       title="编辑任务"
       :visible.sync="editDialogVisible"
       width="50%"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
     >
       <el-alert
         title="如果要修改具体sql代码，请重新新建任务，本页仅支持运行周期相关修改。"
@@ -165,7 +167,7 @@
         :closable="false"
         style="margin-bottom: 30px;"
       />
-      <el-form ref="editForm" :model="editForm" label-width="120px">
+      <el-form ref="editForm" :model="editForm" :rules="editRules" label-width="120px">
         <el-form-item label="游戏分类">
           <el-select v-model="editForm.gameType" placeholder="请选择游戏分类">
             <el-option label="全部" value="" />
@@ -173,8 +175,13 @@
             <el-option label="游戏B" value="gameB" />
           </el-select>
         </el-form-item>
-        <el-form-item label="任务名" style="margin-right: 50px;">
-          <el-input v-model="editForm.taskName" placeholder="请输入任务名" />
+        <el-form-item label="任务名" prop="taskName" style="margin-right: 50px;">
+          <el-input
+            v-model="editForm.taskName"
+            placeholder="请输入任务名"
+            @input="validateTaskName"
+          />
+          <div class="form-tip">每个游戏分类下，任务名称不能重名，不支持空格输入</div>
         </el-form-item>
         <el-row>
           <el-col :span="24">
@@ -216,8 +223,8 @@
         </el-row>
       </el-form>
       <span slot="footer" class="dialog-footer">
-        <el-button type="primary" @click="submitEditForm">更 新</el-button>
-        <el-button @click="handleCancel">取 消</el-button>
+        <el-button type="primary" :loading="updating" @click="submitEditForm">更 新</el-button>
+        <el-button :disabled="updating" @click="handleCancel">取 消</el-button>
       </span>
     </el-dialog>
   </div>
@@ -256,7 +263,15 @@ export default {
       sortParams: [
         { field: 'last_run_at', order: 'desc' },
         { field: 'updated_at', order: 'desc' }
-      ]
+      ],
+      updating: false,
+      originalTaskName: '',
+      editRules: {
+        taskName: [
+          { required: true, message: '请输入任务名称', trigger: 'blur' },
+          { validator: this.validateTaskNameRule, trigger: 'blur' }
+        ]
+      }
     }
   },
   created() {
@@ -434,41 +449,140 @@ export default {
     // 编辑任务
     handleEdit(row) {
       this.editForm = { ...row } // 复制任务信息到编辑表单
+      this.originalTaskName = row.taskName // 保存原始任务名
       this.editDialogVisible = true
     },
 
-    // 提交编辑表单
+    // 验证任务名规则
+    validateTaskNameRule(rule, value, callback) {
+      if (value && value.includes(' ')) {
+        callback(new Error('任务名不支持空格输入'))
+        return
+      }
+      callback()
+    },
+
+    // 实时验证任务名
+    validateTaskName(value) {
+      // 移除空格
+      if (value && value.includes(' ')) {
+        this.editForm.taskName = value.replace(/\s/g, '')
+      }
+    },
+
+    // 检查任务名是否已存在 - 修复版本
+    checkTaskNameExists(gameType, taskName) {
+      // 如果是原始任务名，直接返回不存在
+      if (taskName === this.originalTaskName) {
+        return Promise.resolve(false)
+      }
+
+      // 检查当前表格数据中是否已存在相同游戏分类下的相同任务名
+      const exists = this.tableData.some(task =>
+        task.gameType === gameType &&
+        task.taskName === taskName &&
+        task.id !== this.editForm.id
+      )
+
+      if (exists) {
+        return Promise.resolve(true)
+      }
+
+      // 如果后端API不可用，可以尝试获取完整任务列表进行检查
+      return fetch(`http://localhost:5002/task_management/tasks?gameType=${encodeURIComponent(gameType)}`)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('获取任务列表失败')
+          }
+          return response.json()
+        })
+        .then(data => {
+          const tasks = data.tasks || []
+          return tasks.some(task =>
+            task.taskName === taskName &&
+            task.id !== this.editForm.id
+          )
+        })
+        .catch(error => {
+          console.error('检查任务名失败:', error)
+          // 如果API调用失败，返回false让用户继续，但在控制台记录错误
+          return false
+        })
+    },
+
+    // 提交编辑表单 - 修复版本
     submitEditForm() {
       this.$refs.editForm.validate(valid => {
         if (valid) {
+          this.updating = true
           const taskId = String(this.editForm.id)
-          fetch(`http://localhost:5002/task_management/task/${taskId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(this.editForm)
-          })
-            .then(response => {
-              if (response.ok) {
-                this.$message.success('任务更新成功')
-                this.editDialogVisible = false
-                this.fetchTasks()
-              } else {
-                response.json().then(errorData => {
-                  this.$message.error(errorData.message || '任务更新失败')
+
+          // 检查任务名是否已存在
+          if (this.editForm.taskName !== this.originalTaskName) {
+            this.checkTaskNameExists(this.editForm.gameType, this.editForm.taskName)
+              .then(exists => {
+                if (exists) {
+                  this.$message.error('该游戏分类下已存在相同任务名')
+                  this.updating = false
+                } else {
+                  this.updateTask(taskId)
+                }
+              })
+              .catch(error => {
+                console.error('检查任务名失败:', error)
+                // 如果检查失败，给用户一个选择
+                this.$confirm('无法验证任务名唯一性，是否继续更新?', '警告', {
+                  confirmButtonText: '继续',
+                  cancelButtonText: '取消',
+                  type: 'warning'
+                }).then(() => {
+                  this.updateTask(taskId)
+                }).catch(() => {
+                  this.updating = false
                 })
-              }
-            })
-            .catch(error => {
-              this.$message.error('任务更新失败: ' + error)
-            })
+              })
+          } else {
+            // 任务名未变，直接更新
+            this.updateTask(taskId)
+          }
         } else {
           return false
         }
       })
     },
 
+    // 更新任务
+    updateTask(taskId) {
+      fetch(`http://localhost:5002/task_management/task/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this.editForm)
+      })
+        .then(response => {
+          if (!response.ok) {
+            return response.json().then(data => {
+              throw new Error(data.message || '更新失败')
+            })
+          }
+          return response.json()
+        })
+        .then(data => {
+          this.$message.success('任务更新成功')
+          this.updating = false
+          this.editDialogVisible = false
+          this.fetchTasks() // 刷新任务列表
+        })
+        .catch(error => {
+          this.$message.error('任务更新失败: ' + error.message)
+          this.updating = false
+        })
+    },
+
     // 取消编辑
     handleCancel() {
+      if (this.updating) {
+        return
+      }
       this.editDialogVisible = false
     },
 
@@ -566,3 +680,12 @@ export default {
   }
 }
 </script>
+
+<style scoped>
+.form-tip {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.2;
+  padding-top: 4px;
+}
+</style>
