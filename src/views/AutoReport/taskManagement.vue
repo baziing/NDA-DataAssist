@@ -68,7 +68,7 @@
               <el-tag type="danger">Failure</el-tag>
             </el-tooltip>
             <el-tag v-else-if="scope.row.last_run_status === 'success'" type="success">Success</el-tag>
-            <el-tag v-else type="info">未运行</el-tag>
+            <el-tag v-else type="success">待运行</el-tag>
           </template>
         </el-table-column>
         <el-table-column
