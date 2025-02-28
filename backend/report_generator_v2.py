@@ -11,6 +11,8 @@ import time
 import logging
 from datetime import datetime, timedelta
 from openpyxl.formatting.rule import DataBarRule, ColorScaleRule
+from openpyxl.utils import get_column_letter
+from backend.file_name_formatter import format_filename, get_unique_filename
 
 UPLOAD_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'tmp'))
 
@@ -409,27 +411,6 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
         # 完成所有数据插入,新增标题和首列之前, 更新进度
         task.update_progress({'progress':90, 'log':'完成所有数据插入,调整样式'})
 
-        # 生成输出文件名
-        # base_name = os.path.basename(input_file)
-        # name_parts = base_name.split('_')
-        
-        # # 检查第一个部分的最后一个字符是否为D/W/Y
-        # if len(name_parts) > 0 and len(name_parts[0]) > 0:
-        #     last_char = name_parts[0][-1].upper()
-        #     if last_char in ['D', 'W', 'Y']:
-        #         # 符合命名规则：gameidT_name_YYYYMMDD
-        #         date_str = datetime.now().strftime('%Y%m%d')
-        #         output_file = f"{name_parts[0]}_{'_'.join(name_parts[1:])}_{date_str}.xlsx"
-        #     else:
-        #         # 不符合规则，按时间戳命名
-        #         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        #         file_name_without_ext = os.path.splitext(base_name)[0]
-        #         output_file = f"{file_name_without_ext}_{timestamp}.xlsx"
-        # else:
-        #     # 文件名格式异常，按时间戳命名
-        #     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        #     output_file = f"report_{timestamp}.xlsx"
-        
         # 根据是否传入 input_file 确定文件名
         if input_file:
             # 手动生成，使用原始文件名
@@ -438,8 +419,26 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
             output_file = f"{file_name_without_ext}_{timestamp}.xlsx"
         else:
             # 定时配置，使用任务名
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            output_file = f"{task.task_name}_{timestamp}.xlsx"
+            # 获取文件名模板，如果没有则使用任务名
+            filename_template = getattr(task, 'output_filename', None) or task.task_name
+            
+            # 尝试格式化文件名
+            execution_time = datetime.now()
+            formatted_filename, has_replacement = format_filename(filename_template, execution_time)
+            
+            # 如果没有发生替换，则使用原来的命名规则（任务名+时间戳）
+            if not has_replacement:
+                timestamp = execution_time.strftime('%Y%m%d_%H%M%S')
+                output_file = f"{task.task_name}_{timestamp}.xlsx"
+            else:
+                # 确保文件名以 .xlsx 结尾
+                if not formatted_filename.lower().endswith('.xlsx'):
+                    output_file = f"{formatted_filename}.xlsx"
+                else:
+                    output_file = formatted_filename
+
+        # 确保文件名在输出目录中是唯一的
+        output_file = get_unique_filename(output_dir, output_file)
 
         # 删除所有临时表
         temp_sheets = [sheet for sheet in wb.sheetnames if sheet.startswith('临时表')]
