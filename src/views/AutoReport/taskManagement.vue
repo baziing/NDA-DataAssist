@@ -891,8 +891,9 @@ export default {
       const taskId = this.currentTask.id
       console.log(`正在下载文件: ${filename}, 任务ID: ${taskId}`)
 
-      // 使用完整的URL
-      const baseUrl = process.env.VUE_APP_BASE_API || 'http://localhost:5002'
+      // 直接使用基础URL，不添加prod-api前缀
+      const baseUrl = `http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}`
+
       const url = `${baseUrl}/task_management/download_file/${taskId}/${encodeURIComponent(filename)}`
       console.log('下载URL:', url)
 
