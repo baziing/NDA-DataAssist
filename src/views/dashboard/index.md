@@ -4,7 +4,7 @@
 1. 导入模块：[下载模版示例](https://gitee.com/jhzkkk/downloads/raw/master/neo/%E6%A8%A1%E7%89%88%E7%A4%BA%E4%BE%8B.xlsx) 
 - db_name（必填）：sql运行数据库
 - output_sql（必填）：运行的sql，支持变量替换。将需要替换的字符前后分别插入"{"和"}"。
-- format：表格样式规则，具体见样式规则（见自动报表-使用说明）。
+- format：表格样式规则，具体见样式规则（见自动报表-格式说明）。
 - pos：表格之间的相对位置
 - transpose(Y/N)：表格是否倒置
 2. 导入变量：[下载变量示例](https://gitee.com/jhzkkk/downloads/raw/master/neo/%E5%8F%98%E9%87%8F%E7%A4%BA%E4%BE%8B.xlsx)

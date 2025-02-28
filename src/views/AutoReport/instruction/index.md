@@ -1,5 +1,4 @@
-<details>
-<summary><h1>表格自定义规则</h1></summary>
+# 表格自定义规则
 
 ## 1. 格式规则语法
 格式规则使用分号分隔多个规则，每个规则格式为：
@@ -64,10 +63,8 @@ border:1-10,1-5;
 alignment:center,1-10,1-5;
 number_format:number,2,1-10,1-5
 ```
-</details>
 
-<details>
-<summary><h1>文件名格式化功能说明</h1></summary>
+# 文件名格式化功能说明
 
 ## 概述
 
@@ -166,4 +163,3 @@ number_format:number,2,1-10,1-5
 | `{%Y}年{%m}月销售报表.xlsx` | `2025年02月销售报表.xlsx` |
 | `{date_add(-7, "%Y%m%d")}_至_{%Y%m%d}_周报.xlsx` | `20250221_至_20250228_周报.xlsx` |
 | `{Q1}季度报表.xlsx` | `Q1季度报表.xlsx` |
-</details>
