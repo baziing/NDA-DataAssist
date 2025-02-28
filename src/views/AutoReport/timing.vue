@@ -38,8 +38,13 @@
       </el-form-item>
 
       <el-form-item label="任务名称">
-        <el-input v-model="task.taskName" placeholder="请输入任务名称" />
+        <el-input v-model="task.taskName" placeholder="请输入任务名称" @blur="updateOutputExample" />
         <div class="input-tip">每个游戏分类下，任务名称不能重名，不支持空格输入</div>
+      </el-form-item>
+
+      <el-form-item label="输出示例">
+        <span v-if="outputExample">{{ outputExample }}</span>
+        <span v-else>请在上方输入任务名称</span>
       </el-form-item>
 
       <el-form-item label="定时设置">
@@ -120,7 +125,8 @@ export default {
       uploadProgress: 0,
       uploadStatus: null,
       taskProgress: '',
-      tasks: [] // 假设任务列表存储在这个变量中
+      tasks: [], // 假设任务列表存储在这个变量中
+      outputExample: ''
     }
   },
   created() {
@@ -152,6 +158,27 @@ export default {
       const seconds = String(now.getSeconds()).padStart(2, '0')
 
       return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+    },
+    updateOutputExample() {
+      if (this.task.taskName) {
+        fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/format_filename`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ taskName: this.task.taskName })
+        })
+          .then(response => response.json())
+          .then(data => {
+            this.outputExample = data.formatted_filename
+          })
+          .catch(error => {
+            console.error('Error:', error)
+            this.outputExample = '生成示例失败'
+          })
+      } else {
+        this.outputExample = ''
+      }
     },
     handleFileChange(file, fileList) {
       this.taskProgress = '' // 清空任务进度信息

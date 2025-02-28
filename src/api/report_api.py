@@ -23,6 +23,7 @@ from backend.utils import connect_db, execute_query
 import sqlparse
 import mysql.connector
 from backend.task_management import register_task_management_routes
+from backend.file_name_formatter import format_filename
 
 app = Flask(__name__, static_folder='../../dist', static_url_path='/')
 CORS(app)
@@ -124,6 +125,17 @@ def check_sql():
             return jsonify({"is_valid": False, "message": f"SQL 语句无效: {str(e)}"}), 400
 
     return jsonify({'is_valid': True}), 200
+
+@app.route('/format_filename', methods=['POST'])
+def format_filename_api():
+    data = request.get_json()
+    task_name = data.get('taskName')
+
+    if not task_name:
+        return jsonify({'error': '任务名称不能为空'}), 400
+
+    formatted_name, _ = format_filename(task_name)
+    return jsonify({'formatted_filename': formatted_name}), 200
 
 # 确保上传目录存在
 UPLOAD_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'tmp'))
