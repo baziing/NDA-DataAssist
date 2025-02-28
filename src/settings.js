@@ -37,7 +37,7 @@ module.exports = {
    * @type {string[]}
    * @description Modules to hide in sidebar. Use route names.
    */
-  hiddenModules: [],
+  hiddenModules: ['Permission', 'Icons', 'ComponentDemo', 'Charts', 'Nested', 'Table', 'Example', 'Tab', 'ErrorPages', 'ErrorLog', 'Excel', 'Zip', 'PDF', 'Theme', 'ClipboardDemo', 'external-link', 'Guide', 'Documentation'],
 
   // ['Permission', 'Icons', 'ComponentDemo', 'Charts', 'Nested', 'Table', 'Example', 'Tab', 'ErrorPages', 'ErrorLog', 'Excel', 'Zip', 'PDF', 'Theme', 'ClipboardDemo', 'external-link', 'Guide', 'Documentation']
 

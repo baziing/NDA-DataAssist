@@ -99,13 +99,13 @@
 
 <script>
 import settings from '@/settings'
-const { serverAddress, gameCategories } = settings
+
 export default {
   name: 'Timing',
   data() {
     const now = new Date()
     return {
-      gameCategories,
+      gameCategories: settings.gameCategories,
       task: {
         filename: '',
         uuidFileName: '', // 用于存储后端返回的 UUID 文件名
@@ -179,7 +179,7 @@ export default {
       const formData = new FormData()
       formData.append('file', file.raw)
 
-      fetch(`http://${serverAddress}:${process.env.VUE_APP_API_PORT}/upload`, {
+      fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/upload`, {
         method: 'POST',
         body: formData
       })
@@ -265,7 +265,7 @@ export default {
       // 检查任务名称是否重名
       this.taskProgress += `${this.getFormattedTimestamp()} - 正在检测任务名称是否有重名……\n`
       // 重要提示：如果您希望从同一网络中的其他计算机访问此服务，请将 "localhost" 替换为运行此服务的计算机的 IP 地址或主机名。
-      fetch(`http://${serverAddress}:${process.env.VUE_APP_API_PORT}/check_task_name`, {
+      fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/check_task_name`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -294,7 +294,7 @@ export default {
           // 在这里添加 SQL 校验逻辑
           this.taskProgress += `${this.getFormattedTimestamp()} - 正在校验sql……\n`
           // 调用后端 API 校验 SQL
-          return fetch(`http://${serverAddress}:${process.env.VUE_APP_API_PORT}/check_sql`, {
+          return fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/check_sql`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
@@ -322,7 +322,7 @@ export default {
               // 正在创建任务
               this.taskProgress += `${this.getFormattedTimestamp()} - 正在创建任务……\n`
               // TODO: 调用后端 API 创建任务
-              return fetch(`http://${serverAddress}:${process.env.VUE_APP_API_PORT}/create_task`, {
+              return fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/create_task`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json'

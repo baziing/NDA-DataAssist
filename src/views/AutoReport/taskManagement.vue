@@ -4,7 +4,6 @@
       <el-form :inline="true" :model="searchForm" class="demo-form-inline">
         <el-form-item label="游戏分类">
           <el-select v-model="searchForm.gameType" placeholder="请选择游戏分类">
-            <el-option label="全部" value="" />
             <el-option
               v-for="item in gameCategories"
               :key="item.value"
@@ -355,10 +354,10 @@ export default {
   name: 'TaskManagement',
   data() {
     return {
-      gameCategories: settings.gameCategories.map(item => ({
-        label: item.label,
-        value: item.value
-      })),
+      gameCategories: [
+        { label: '全部', value: '' },
+        ...settings.gameCategories
+      ],
       editGameCategories: settings.gameCategories,
       searchForm: {
         gameType: '',
@@ -428,7 +427,7 @@ export default {
         .map(key => `${key}=${encodeURIComponent(params[key])}`)
         .join('&')
 
-      const url = `http://localhost:5002/task_management/tasks?${queryString}`
+      const url = `http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/task_management/tasks?${queryString}`
 
       fetch(url)
         .then(response => {
@@ -550,7 +549,7 @@ export default {
 
       // 添加时间戳避免缓存
       const timestamp = new Date().getTime()
-      const url = `/task_management/task_sql/${taskId}?_=${timestamp}`
+      const url = `http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/task_management/task_sql/${taskId}?_=${timestamp}`
       console.log('查看SQL - 请求 URL:', url)
       console.log('查看SQL - 请求头:', { 'Content-Type': 'application/json' })
 
@@ -627,7 +626,7 @@ export default {
       }
 
       // 如果后端API不可用，可以尝试获取完整任务列表进行检查
-      return fetch(`http://localhost:5002/task_management/tasks?gameType=${encodeURIComponent(gameType)}`)
+      return fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/task_management/tasks?gameType=${encodeURIComponent(gameType)}`)
         .then(response => {
           if (!response.ok) {
             throw new Error('获取任务列表失败')
@@ -703,7 +702,7 @@ export default {
         updateData.recalculate_next_run = true
       }
 
-      fetch(`http://localhost:5002/task_management/task/${taskId}`, {
+      fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/task_management/task/${taskId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updateData)
@@ -748,7 +747,7 @@ export default {
         cancelButtonText: '取消',
         type: 'warning'
       }).then(() => {
-        fetch(`http://localhost:5002/task_management/task/${this.getTaskId(row)}`, {
+        fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/task_management/task/${this.getTaskId(row)}`, {
           method: 'DELETE'
         })
           .then(response => {
@@ -786,7 +785,7 @@ export default {
       }).then(() => {
         const taskIds = this.multipleSelection.map(item => this.getTaskId(item))
 
-        fetch('http://localhost:5002/task_management/tasks/batch_delete', {
+        fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/task_management/tasks/batch_delete`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -847,7 +846,7 @@ export default {
 
       console.log(`正在加载任务 ${taskId} 的文件列表`)
 
-      axios.get(`/task_management/task_files/${taskId}`)
+      axios.get(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/task_management/task_files/${taskId}`)
         .then(response => {
           console.log('获取文件列表成功:', response.data)
           this.taskFiles = response.data
