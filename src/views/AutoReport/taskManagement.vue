@@ -172,7 +172,7 @@
       :close-on-press-escape="false"
     >
       <el-alert
-        title="如果要修改具体sql代码，请重新新建任务，本页仅支持运行周期相关修改。"
+        title="如果要修改具体sql代码，请重新新建任务，本页仅支持运行名称和周期相关修改。"
         type="warning"
         icon="el-icon-warning"
         :closable="false"
@@ -189,13 +189,19 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="任务名" prop="taskName" style="margin-right: 50px;">
+        <el-form-item label="任务名称" prop="taskName" style="margin-right: 50px;">
           <el-input
             v-model="editForm.taskName"
             placeholder="请输入任务名"
             @input="validateTaskName"
+            @blur="updateEditOutputExample"
           />
-          <div class="form-tip">每个游戏分类下，任务名称不能重名，不支持空格输入</div>
+          <div class="form-tip">每个游戏分类下，任务名称不能重名，不支持空格输入；<br>
+            支持日期命名，以达到[25M02月度报告.xlsx]效果。具体请见 格式说明-文件名格式化；  </div>
+        </el-form-item>
+        <el-form-item label="输出示例">
+          <span v-if="editOutputExample">{{ editOutputExample }}</span>
+          <span v-else>请在上方输入任务名称</span>
         </el-form-item>
         <el-row>
           <el-col :span="24">
@@ -389,24 +395,40 @@ export default {
       ],
       updating: false,
       originalTaskName: '',
-      editRules: {
-        taskName: [
-          { required: true, message: '请输入任务名称', trigger: 'blur' },
-          { validator: this.validateTaskNameRule, trigger: 'blur' }
-        ]
-      },
       taskDetailVisible: false,
       activeTab: 'info',
       taskFiles: [],
       filesLoading: false,
       downloadDialogVisible: false,
-      currentTask: null
+      currentTask: null,
+      editOutputExample: ''
     }
   },
   created() {
     this.fetchTasks()
   },
   methods: {
+    updateEditOutputExample() {
+      if (this.editForm.taskName) {
+        fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/format_filename`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ taskName: this.editForm.taskName })
+        })
+          .then(response => response.json())
+          .then(data => {
+            this.editOutputExample = data.formatted_filename
+          })
+          .catch(error => {
+            console.error('Error:', error)
+            this.editOutputExample = '生成示例失败'
+          })
+      } else {
+        this.editOutputExample = ''
+      }
+    },
     // 获取任务列表
     fetchTasks(sortBy = '', sortOrder = '') {
       const params = {
@@ -588,6 +610,7 @@ export default {
       }
       this.originalTaskName = row.taskName
       this.editDialogVisible = true
+      this.updateEditOutputExample() // 初始化输出示例
     },
 
     // 验证任务名规则

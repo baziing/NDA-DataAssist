@@ -39,7 +39,8 @@
 
       <el-form-item label="任务名称">
         <el-input v-model="task.taskName" placeholder="请输入任务名称" @blur="updateOutputExample" />
-        <div class="input-tip">每个游戏分类下，任务名称不能重名，不支持空格输入</div>
+        <div class="form-tip">每个游戏分类下，任务名称不能重名，不支持空格输入；<br>
+          支持日期命名，以达到[25M02月度报告.xlsx]效果。具体请见 格式说明-文件名格式化；</div>
       </el-form-item>
 
       <el-form-item label="输出示例">
@@ -47,42 +48,46 @@
         <span v-else>请在上方输入任务名称</span>
       </el-form-item>
 
-      <el-form-item label="定时设置">
-        <div style="display: flex;  width: 100%;">
-          <el-select v-model="task.frequency" placeholder="请先选择频率" style="flex: 1; max-width: 200px; margin-right: 10px;">
-            <el-option label="每月" value="month" />
-            <el-option label="每周" value="week" />
-            <el-option label="每日" value="day" />
-          </el-select>
+      <el-row>
+        <el-col :span="24">
+          <el-form-item label="定时设置">
+            <div style="display: flex;  width: 100%;">
+              <el-select v-model="task.frequency" placeholder="请先选择频率" style="flex: 1; max-width: 200px; margin-right: 10px;">
+                <el-option label="每月" value="month" />
+                <el-option label="每周" value="week" />
+                <el-option label="每日" value="day" />
+              </el-select>
 
-          <el-select v-if="task.frequency === 'month'" v-model="task.dayOfMonth" placeholder="请选择日期" style="flex: 1; max-width: 200px; margin-right: 10px;">
-            <el-option v-for="day in 31" :key="day" :label="day + '日'" :value="day" />
-          </el-select>
+              <el-select v-if="task.frequency === 'month'" v-model="task.dayOfMonth" placeholder="请选择日期" style="flex: 1; max-width: 200px; margin-right: 10px;">
+                <el-option v-for="day in 31" :key="day" :label="day + '日'" :value="day" />
+              </el-select>
 
-          <el-select v-if="task.frequency === 'week'" v-model="task.dayOfWeek" placeholder="请选择星期" style="flex: 1; max-width: 200px; margin-right: 10px;">
-            <el-option label="周一" value="1" />
-            <el-option label="周二" value="2" />
-            <el-option label="周三" value="3" />
-            <el-option label="周四" value="4" />
-            <el-option label="周五" value="5" />
-            <el-option label="周六" value="6" />
-            <el-option label="周日" value="7" />
-          </el-select>
+              <el-select v-if="task.frequency === 'week'" v-model="task.dayOfWeek" placeholder="请选择星期" style="flex: 1; max-width: 200px; margin-right: 10px;">
+                <el-option label="周一" value="1" />
+                <el-option label="周二" value="2" />
+                <el-option label="周三" value="3" />
+                <el-option label="周四" value="4" />
+                <el-option label="周五" value="5" />
+                <el-option label="周六" value="6" />
+                <el-option label="周日" value="7" />
+              </el-select>
 
-          <el-select v-if="!task.frequency" v-model="task.daySetting" placeholder="请选择" style="flex: 1; max-width: 200px; margin-right: 10px;" disabled />
-          <el-select v-else-if="task.frequency === 'day'" v-model="task.daySetting" placeholder="无需选择" style="flex: 1; max-width: 200px; margin-right: 10px;" disabled>
-            <el-option label="无需选择" value="none" />
-          </el-select>
+              <el-select v-if="!task.frequency" v-model="task.daySetting" placeholder="请选择" style="flex: 1; max-width: 200px; margin-right: 10px;" disabled />
+              <el-select v-else-if="task.frequency === 'day'" v-model="task.daySetting" placeholder="无需选择" style="flex: 1; max-width: 200px; margin-right: 10px;" disabled>
+                <el-option label="无需选择" value="none" />
+              </el-select>
 
-          <el-time-picker
-            v-model="task.time"
-            placeholder="选择时间"
-            format="HH:mm"
-            value-format="HH:mm"
-            style="flex: 1; max-width: 200px;"
-          />
-        </div>
-      </el-form-item>
+              <el-time-picker
+                v-model="task.time"
+                placeholder="选择时间"
+                format="HH:mm"
+                value-format="HH:mm"
+                style="flex: 1; max-width: 200px;"
+              />
+            </div>
+          </el-form-item>
+        </el-col>
+      </el-row>
 
       <el-form-item>
         <el-button type="danger" @click="clearForm">清空配置</el-button>
@@ -423,7 +428,10 @@ export default {
   padding: 20px;
 }
 
-.input-tip{
+.form-tip {
   font-size: 12px;
+  color: #909399;
+  line-height: 1.2;
+  padding-top: 4px;
 }
 </style>
