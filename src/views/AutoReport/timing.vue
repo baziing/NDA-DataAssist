@@ -28,19 +28,12 @@
 
       <el-form-item label="游戏分类">
         <el-select v-model="task.gameType" placeholder="请选择游戏分类">
-          <el-option label="无归类" value="无归类" />
-          <el-option label="风之大陆" value="风之大陆" />
-          <el-option label="战神遗迹" value="战神遗迹" />
-          <el-option label="云上城之歌" value="云上城之歌" />
-          <el-option label="闪烁之光" value="闪烁之光" />
-          <el-option label="有杀气童话2" value="有杀气童话2" />
-          <el-option label="矩阵临界" value="矩阵临界" />
-          <el-option label="不朽觉醒" value="不朽觉醒" />
-          <el-option label="Kemono Friends" value="Kemono Friends" />
-          <el-option label="最后的原始人" value="最后的原始人" />
-          <el-option label="Order Daybreak" value="Order Daybreak" />
-          <el-option label="The Dragon Odyssey" value="The Dragon Odyssey" />
-          <el-option label="白荆回廊" value="白荆回廊" />
+          <el-option
+            v-for="item in gameCategories"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
         </el-select>
       </el-form-item>
 
@@ -106,12 +99,13 @@
 
 <script>
 import settings from '@/settings'
-const { serverAddress } = settings
+const { serverAddress, gameCategories } = settings
 export default {
   name: 'Timing',
   data() {
     const now = new Date()
     return {
+      gameCategories,
       task: {
         filename: '',
         uuidFileName: '', // 用于存储后端返回的 UUID 文件名
@@ -346,9 +340,6 @@ export default {
               }
             })
             .then(data => {
-              this.$message.success(data.message || '任务创建成功！')
-              this.taskProgress += `${this.getFormattedTimestamp()} - 创建成功。\n`
-
               // 获取 task_id 和 next_run_at
               this.$message.success(data.message || '任务创建成功！')
               this.taskProgress += `${this.getFormattedTimestamp()} - 创建成功。\n`

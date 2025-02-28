@@ -159,7 +159,7 @@ export const constantRoutes = [
         path: 'instruction',
         component: () => import('@/views/AutoReport/instruction/index'),
         name: 'Instruction',
-        meta: { title: '使用说明' }
+        meta: { title: '表格规则' }
       }
     ]
   }

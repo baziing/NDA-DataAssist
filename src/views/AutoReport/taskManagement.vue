@@ -5,8 +5,12 @@
         <el-form-item label="游戏分类">
           <el-select v-model="searchForm.gameType" placeholder="请选择游戏分类">
             <el-option label="全部" value="" />
-            <el-option label="游戏A" value="gameA" />
-            <el-option label="游戏B" value="gameB" />
+            <el-option
+              v-for="item in gameCategories"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="任务名">
@@ -178,9 +182,12 @@
       <el-form ref="editForm" :model="editForm" :rules="editRules" label-width="120px">
         <el-form-item label="游戏分类">
           <el-select v-model="editForm.gameType" placeholder="请选择游戏分类">
-            <el-option label="全部" value="" />
-            <el-option label="游戏A" value="gameA" />
-            <el-option label="游戏B" value="gameB" />
+            <el-option
+              v-for="item in editGameCategories"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="任务名" prop="taskName" style="margin-right: 50px;">
@@ -342,11 +349,17 @@
 <script>
 import moment from 'moment'
 import axios from 'axios'
+import settings from '@/settings'
 
 export default {
   name: 'TaskManagement',
   data() {
     return {
+      gameCategories: settings.gameCategories.map(item => ({
+        label: item.label,
+        value: item.value
+      })),
+      editGameCategories: settings.gameCategories,
       searchForm: {
         gameType: '',
         taskName: '',
