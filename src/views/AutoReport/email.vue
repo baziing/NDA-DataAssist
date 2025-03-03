@@ -885,7 +885,7 @@ export default {
       // 获取所有邮箱
       apiClient.get('/emails')
         .then(response => {
-          this.allEmails = response.data.map(item => ({
+          this.allEmails = response.data.items.map(item => ({
             id: String(item.id), // 将 id 转换为字符串
             email: item.email
           }))

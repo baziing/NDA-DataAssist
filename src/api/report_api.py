@@ -600,6 +600,7 @@ def get_group_members_api(group_id):
     """获取邮箱组成员"""
     result = get_group_members(group_id)
     if result['status'] == 'success':
+        # 确保返回的是数组，而不是对象
         return jsonify(result['data']), 200
     else:
         return jsonify({'error': result['message']}), 400

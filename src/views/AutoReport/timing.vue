@@ -89,6 +89,42 @@
         </el-col>
       </el-row>
 
+      <!-- 新增邮件地址选择 -->
+      <el-form-item label="邮件地址">
+        <el-select
+          v-model="task.recipients"
+          multiple
+          filterable
+          placeholder="请选择收件人"
+          style="width: 100%;"
+        >
+          <el-option-group label="邮件组">
+            <el-option
+              v-for="group in emailGroups"
+              :key="'group-' + group.id"
+              :label="group.name"
+              :value="'group-' + group.id"
+            >
+              <span style="float: left">{{ group.name }}</span>
+              <span style="float: right; color: #8492a6; font-size: 13px">邮件组</span>
+            </el-option>
+          </el-option-group>
+          <el-option-group label="邮件地址">
+            <el-option
+              v-for="email in emails"
+              :key="'email-' + email.id"
+              :label="email.name ? email.name + ' <' + email.email + '>' : email.email"
+              :value="'email-' + email.id"
+            >
+              <i v-if="task.filename" class="el-icon-delete" style="margin-left: 10px;" @click="handleFileRemove(null, [])" />
+              <span style="float: right; color: #8492a6; font-size: 13px">个人</span>
+            </el-option>
+          </el-option-group>
+        </el-select>
+        <div class="form-tip">可以选择多个邮件组或邮件地址作为收件人</div>
+      </el-form-item>
+      <!-- 邮件地址选择结束 -->
+
       <el-form-item>
         <el-button type="danger" @click="clearForm">清空配置</el-button>
         <el-button type="primary" @click="createTask">创建任务</el-button>
@@ -124,14 +160,17 @@ export default {
         frequency: '',
         dayOfMonth: '',
         dayOfWeek: '',
-        time: `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`
+        time: `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`,
+        recipients: [] // 新增收件人字段
       },
       fileList: [],
       uploadProgress: 0,
       uploadStatus: null,
       taskProgress: '',
       tasks: [], // 假设任务列表存储在这个变量中
-      outputExample: ''
+      outputExample: '',
+      emails: [], // 存储邮件地址列表
+      emailGroups: [] // 存储邮件组列表
     }
   },
   created() {
@@ -151,8 +190,53 @@ export default {
       .catch(error => {
         console.error('Error:', error)
       })
+
+    // 获取邮件地址列表
+    this.fetchEmails()
+
+    // 获取邮件组列表
+    this.fetchEmailGroups()
   },
   methods: {
+    // 获取邮件地址列表
+    fetchEmails() {
+      fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/emails`)
+        .then(response => {
+          if (response.ok) {
+            return response.json()
+          } else {
+            throw new Error('获取邮件地址列表失败')
+          }
+        })
+        .then(data => {
+          console.log('邮件地址列表:', data)
+          this.emails = data
+        })
+        .catch(error => {
+          console.error('获取邮件地址失败:', error)
+          this.$message.error('获取邮件地址列表失败')
+        })
+    },
+
+    // 获取邮件组列表
+    fetchEmailGroups() {
+      fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/email-groups`)
+        .then(response => {
+          if (response.ok) {
+            return response.json()
+          } else {
+            throw new Error('获取邮件组列表失败')
+          }
+        })
+        .then(data => {
+          console.log('邮件组列表:', data)
+          this.emailGroups = data
+        })
+        .catch(error => {
+          console.error('获取邮件组失败:', error)
+          this.$message.error('获取邮件组列表失败')
+        })
+    },
     getFormattedTimestamp() {
       const now = new Date()
       const year = now.getFullYear()
@@ -261,6 +345,7 @@ export default {
       this.task.dayOfWeek = ''
       this.task.daySetting = ''
       this.task.time = ''
+      this.task.recipients = [] // 清空收件人
       this.fileList = []
       this.uploadProgress = 0
       this.uploadStatus = null
