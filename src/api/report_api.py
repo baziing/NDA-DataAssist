@@ -27,8 +27,8 @@ from backend.task_management import register_task_management_routes
 from backend.file_name_formatter import format_filename
 from backend import task_scheduler
 from backend.email_management import (
-    get_all_emails, search_emails, add_email, update_email, delete_email,
-    get_all_groups, search_groups, add_group, update_group, delete_group,
+    get_all_emails, search_emails, add_email, update_email, delete_email, batch_delete_emails,
+    get_all_groups, search_groups, add_group, update_group, delete_group, batch_delete_groups,
     get_group_members, update_group_members, get_report_options
 )
 
@@ -456,20 +456,27 @@ def upload_vars():
 # 邮箱管理API
 @app.route('/emails', methods=['GET'])
 def get_emails_api():
-    """获取所有邮箱"""
-    result = get_all_emails()
+    """获取所有邮箱，支持分页和搜索"""
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('pageSize', 10, type=int)
+    search_text = request.args.get('q', None)
+    
+    result = get_all_emails(page=page, page_size=page_size, search_text=search_text)
     if result['status'] == 'success':
-        return jsonify(result['data']), 200
+        return jsonify(result), 200  # 返回整个 result 对象
     else:
         return jsonify({'error': result['message']}), 400
 
 @app.route('/emails/search', methods=['GET'])
 def search_emails_api():
-    """搜索邮箱"""
+    """搜索邮箱，支持分页"""
     search_text = request.args.get('q', '')
-    result = search_emails(search_text)
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('pageSize', 10, type=int)
+    
+    result = search_emails(search_text, page=page, page_size=page_size)
     if result['status'] == 'success':
-        return jsonify(result['data']), 200
+        return jsonify(result), 200  # 返回整个 result 对象
     else:
         return jsonify({'error': result['message']}), 400
 
@@ -503,23 +510,45 @@ def delete_email_api(email_id):
     else:
         return jsonify({'error': result['message']}), 400
 
+@app.route('/emails/batch-delete', methods=['POST'])
+def batch_delete_emails_api():
+    """批量删除邮箱"""
+    email_ids = request.json.get('ids', [])
+    if not email_ids:
+        return jsonify({'error': '未提供要删除的邮箱ID'}), 400
+    
+    result = batch_delete_emails(email_ids)
+    if result['status'] == 'success':
+        return jsonify({'message': result['message']}), 200
+    else:
+        return jsonify({'error': result['message']}), 400
+
 # 邮箱组管理API
 @app.route('/email-groups', methods=['GET'])
 def get_groups_api():
-    """获取所有邮箱组"""
-    result = get_all_groups()
+    """获取所有邮箱组，支持分页和搜索"""
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('pageSize', 10, type=int)
+    search_text = request.args.get('q', None)
+    
+    result = get_all_groups(page=page, page_size=page_size, search_text=search_text)
     if result['status'] == 'success':
-        return jsonify(result['data']), 200
+        # 确保 data 字段是一个数组
+        return jsonify(result['items']), 200
     else:
         return jsonify({'error': result['message']}), 400
 
 @app.route('/email-groups/search', methods=['GET'])
 def search_groups_api():
-    """搜索邮箱组"""
+    """搜索邮箱组，支持分页"""
     search_text = request.args.get('q', '')
-    result = search_groups(search_text)
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('pageSize', 10, type=int)
+    
+    result = search_groups(search_text, page=page, page_size=page_size)
     if result['status'] == 'success':
-        return jsonify(result['data']), 200
+        # 确保 data 字段是一个数组
+        return jsonify(result['items']), 200
     else:
         return jsonify({'error': result['message']}), 400
 
@@ -548,6 +577,19 @@ def update_group_api(group_id):
 def delete_group_api(group_id):
     """删除邮箱组"""
     result = delete_group(group_id)
+    if result['status'] == 'success':
+        return jsonify({'message': result['message']}), 200
+    else:
+        return jsonify({'error': result['message']}), 400
+
+@app.route('/email-groups/batch-delete', methods=['POST'])
+def batch_delete_groups_api():
+    """批量删除邮箱组"""
+    group_ids = request.json.get('ids', [])
+    if not group_ids:
+        return jsonify({'error': '未提供要删除的邮箱组ID'}), 400
+    
+    result = batch_delete_groups(group_ids)
     if result['status'] == 'success':
         return jsonify({'message': result['message']}), 200
     else:

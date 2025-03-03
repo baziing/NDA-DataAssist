@@ -475,18 +475,29 @@ export default {
       apiClient.get(`/emails?page=${this.emailCurrentPage}&pageSize=${this.emailPageSize}&q=${this.emailSearchText}`)
         .then(response => {
           console.log('获取到的邮箱数据:', response.data)
-          this.emailList = response.data.items.map(email => ({
-            ...email,
-            id: String(email.id),
-            groups: email.groups ? email.groups.map(group => ({
-              value: String(group.value),
-              label: group.label
-            })) : [],
-            reports: email.reports ? email.reports.map(report => ({
-              ...report,
-              id: String(report.id)
-            })) : []
-          }))
+          console.log('response.data.items:', response.data.items)
+          console.log('response.data.items 的类型:', Array.isArray(response.data.items) ? 'Array' : typeof response.data.items)
+
+          this.emailList = response.data.items.map(email => {
+            console.log('当前 email:', email)
+            console.log('email.groups:', email.groups)
+            console.log('email.groups 的类型:', Array.isArray(email.groups) ? 'Array' : typeof email.groups)
+            console.log('email.reports:', email.reports)
+            console.log('email.reports 的类型:', Array.isArray(email.reports) ? 'Array' : typeof email.reports)
+
+            return {
+              ...email,
+              id: String(email.id),
+              groups: Array.isArray(email.groups) ? email.groups.map(group => ({
+                value: String(group.value),
+                label: group.label
+              })) : [],
+              reports: Array.isArray(email.reports) ? email.reports.map(report => ({
+                ...report,
+                id: String(report.id)
+              })) : []
+            }
+          })
           this.emailTotal = response.data.total || this.emailList.length
           // 更新邮箱选项
           this.allEmailOptions = this.emailList.map(item => ({

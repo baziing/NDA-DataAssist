@@ -31,11 +31,11 @@ def group_name_exists(cursor, group_name, exclude_id=None):
     cursor.execute(query, params)
     return cursor.fetchone() is not None
 
-def get_all_emails():
+def get_all_emails(page=1, page_size=10, search_text=None):
     """
-    获取所有邮箱地址
+    获取所有邮箱地址，支持分页和搜索
     """
-    logger.info("开始获取所有邮箱")
+    logger.info(f"开始获取邮箱列表: 页码={page}, 每页数量={page_size}, 搜索文本={search_text}")
     conn = None
     cursor = None
     try:
@@ -47,13 +47,35 @@ def get_all_emails():
         logger.debug("数据库连接成功")
         cursor = conn.cursor(dictionary=True)
         
-        # 查询所有邮箱
-        query = """
-        SELECT id, email FROM autoreport_emails
-        ORDER BY email
+        # 构建查询条件
+        where_clause = ""
+        params = []
+        if search_text:
+            where_clause = "WHERE email LIKE %s"
+            params.append(f'%{search_text}%')
+        
+        # 查询总数
+        count_query = f"""
+        SELECT COUNT(*) as total FROM autoreport_emails
+        {where_clause}
         """
-        logger.debug(f"执行SQL: {query}")
-        cursor.execute(query)
+        cursor.execute(count_query, params)
+        total = cursor.fetchone()['total']
+        logger.debug(f"邮箱总数: {total}")
+        
+        # 计算分页
+        offset = (page - 1) * page_size
+        
+        # 查询邮箱列表
+        query = f"""
+        SELECT id, email FROM autoreport_emails
+        {where_clause}
+        ORDER BY email
+        LIMIT %s OFFSET %s
+        """
+        query_params = params + [page_size, offset]
+        logger.debug(f"执行SQL: {query}, 参数: {query_params}")
+        cursor.execute(query, query_params)
         emails = cursor.fetchall()
         logger.debug(f"获取到 {len(emails)} 个邮箱")
         
@@ -84,12 +106,18 @@ def get_all_emails():
             for report in email['reports']:
                 report['id'] = str(report['id'])  # 将 report_id 转换为字符串
 
-        logger.info("成功获取所有邮箱及其关联信息")
-        return {'status': 'success', 'data': emails}
+        logger.info("成功获取邮箱列表及其关联信息")
+        return {
+            'status': 'success',
+            'items': emails if emails is not None else [],  # 确保 items 始终是一个数组
+            'total': total,
+            'page': page,
+            'pageSize': page_size
+        }
     except Error as e:
         logger.error(f"获取邮箱列表失败: {e}")
         logger.error(traceback.format_exc())
-        return {'status': 'error', 'message': f'获取邮箱列表失败: {str(e)}'}
+        return {'status': 'error', 'message': f'获取邮箱列表失败: {str(e)}', 'items': []}
     finally:
         try:
             if cursor:
@@ -101,22 +129,43 @@ def get_all_emails():
         except Exception as e:
             logger.error(f"关闭数据库连接时出错: {e}")
 
-def search_emails(search_text):
+def search_emails(search_text, page=1, page_size=10):
     """
-    搜索邮箱地址
+    搜索邮箱地址，支持分页
     """
+    logger.info(f"开始搜索邮箱: 搜索文本={search_text}, 页码={page}, 每页数量={page_size}")
+    conn = None
+    cursor = None
     try:
         conn = connect_db()
+        if not conn:
+            logger.error("数据库连接失败")
+            return {'status': 'error', 'message': '数据库连接失败'}
+            
         cursor = conn.cursor(dictionary=True)
+        
+        # 查询总数
+        count_query = """
+        SELECT COUNT(*) as total FROM autoreport_emails
+        WHERE email LIKE %s
+        """
+        cursor.execute(count_query, (f'%{search_text}%',))
+        total = cursor.fetchone()['total']
+        logger.debug(f"匹配邮箱总数: {total}")
+        
+        # 计算分页
+        offset = (page - 1) * page_size
         
         # 搜索邮箱
         query = """
         SELECT id, email FROM autoreport_emails
         WHERE email LIKE %s
         ORDER BY email
+        LIMIT %s OFFSET %s
         """
-        cursor.execute(query, (f'%{search_text}%',))
+        cursor.execute(query, (f'%{search_text}%', page_size, offset))
         emails = cursor.fetchall()
+        logger.debug(f"获取到 {len(emails)} 个邮箱")
         
         # 为每个邮箱获取所属组信息
         for email in emails:
@@ -145,14 +194,28 @@ def search_emails(search_text):
             for report in email['reports']:
                 report['id'] = str(report['id'])  # 将 report_id 转换为字符串
         
-        return {'status': 'success', 'data': emails}
+        logger.info(f"成功搜索邮箱，找到 {total} 个匹配结果")
+        return {
+            'status': 'success', 
+            'items': emails,
+            'total': total,
+            'page': page,
+            'pageSize': page_size
+        }
     except Error as e:
-        logging.error(f"搜索邮箱失败: {e}")
+        logger.error(f"搜索邮箱失败: {e}")
+        logger.error(traceback.format_exc())
         return {'status': 'error', 'message': f'搜索邮箱失败: {str(e)}'}
     finally:
-        if conn.is_connected():
-            cursor.close()
-            conn.close()
+        try:
+            if cursor:
+                cursor.close()
+                logger.debug("游标已关闭")
+            if conn and conn.is_connected():
+                conn.close()
+                logger.debug("数据库连接已关闭")
+        except Exception as e:
+            logger.error(f"关闭数据库连接时出错: {e}")
 
 def add_email(email_data):
     """
@@ -383,6 +446,89 @@ def delete_email(email_id):
             conn.close()
         logger.debug("数据库连接已关闭")
 
+def batch_delete_emails(email_ids):
+    """
+    批量删除邮箱
+    
+    Args:
+        email_ids: 要删除的邮箱ID列表
+    """
+    logger.info(f"开始批量删除邮箱: IDs={email_ids}")
+    conn = None
+    cursor = None
+    try:
+        conn = connect_db()
+        if not conn:
+            logger.error("数据库连接失败")
+            return {'status': 'error', 'message': '数据库连接失败'}
+        
+        cursor = conn.cursor()
+        
+        # 开始事务
+        conn.start_transaction()
+
+        # 确保所有ID都是字符串
+        email_ids = [str(email_id) for email_id in email_ids]
+        
+        # 构建IN子句的参数占位符
+        placeholders = ', '.join(['%s'] * len(email_ids))
+        
+        # 1. 删除邮箱组成员关系
+        delete_group_member_query = f"""
+        DELETE FROM autoreport_email_group_members 
+        WHERE email_id IN ({placeholders})
+        """
+        cursor.execute(delete_group_member_query, email_ids)
+        logger.debug(f"删除邮箱组成员关系成功，邮箱IDs: {email_ids}")
+
+        # 2. 删除报表接收者关系
+        delete_recipient_query = f"""
+        DELETE FROM autoreport_task_recipients 
+        WHERE email_id IN ({placeholders})
+        """
+        cursor.execute(delete_recipient_query, email_ids)
+        logger.debug(f"删除报表接收者关系成功，邮箱IDs: {email_ids}")
+
+        # 3. 删除邮箱
+        delete_email_query = f"""
+        DELETE FROM autoreport_emails 
+        WHERE id IN ({placeholders})
+        """
+        cursor.execute(delete_email_query, email_ids)
+        logger.debug(f"删除邮箱成功，IDs: {email_ids}")
+
+        # 提交事务
+        conn.commit()
+        logger.info(f"批量删除邮箱成功，共 {len(email_ids)} 个")
+        
+        return {
+            'status': 'success',
+            'message': f'成功删除 {len(email_ids)} 个邮箱'
+        }
+    except Error as e:
+        # 回滚事务
+        if conn:
+            conn.rollback()
+        error_msg = str(e)
+        logger.error(f"批量删除邮箱失败: {error_msg}")
+        logger.error(traceback.format_exc())
+        return {'status': 'error', 'message': f'批量删除邮箱失败: {error_msg}'}
+    except Exception as e:
+        # 回滚事务
+        if conn:
+            conn.rollback()
+        error_msg = str(e)
+        logger.error(f"批量删除邮箱时发生未知错误: {error_msg}")
+        logger.error(traceback.format_exc())
+        return {'status': 'error', 'message': f'批量删除邮箱时发生未知错误: {error_msg}'}
+    finally:
+        # 确保资源被正确关闭
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+        logger.debug("数据库连接已关闭")
+
 def get_all_groups():
     """
     获取所有邮箱组
@@ -426,26 +572,56 @@ def get_all_groups():
             cursor.close()
             conn.close()
 
-def search_groups(search_text):
+def get_all_groups(page=1, page_size=10, search_text=None):
     """
-    搜索邮箱组
+    获取所有邮箱组，支持分页和搜索
     """
+    logger.info(f"开始获取邮箱组列表: 页码={page}, 每页数量={page_size}, 搜索文本={search_text}")
+    conn = None
+    cursor = None
     try:
         conn = connect_db()
+        if not conn:
+            logger.error("数据库连接失败")
+            return {'status': 'error', 'message': '数据库连接失败'}
+            
         cursor = conn.cursor(dictionary=True)
         
-        # 搜索邮箱组
-        query = """
+        # 构建查询条件
+        where_clause = ""
+        params = []
+        if search_text:
+            where_clause = "WHERE g.group_name LIKE %s"
+            params.append(f'%{search_text}%')
+        
+        # 查询总数
+        count_query = f"""
+        SELECT COUNT(*) as total FROM autoreport_email_groups g
+        {where_clause}
+        """
+        cursor.execute(count_query, params)
+        total = cursor.fetchone()['total']
+        logger.debug(f"邮箱组总数: {total}")
+        
+        # 计算分页
+        offset = (page - 1) * page_size
+        
+        # 查询邮箱组列表
+        query = f"""
         SELECT g.id, g.group_name, 
                COUNT(m.email_id) as memberCount
         FROM autoreport_email_groups g
         LEFT JOIN autoreport_email_group_members m ON g.id = m.group_id
-        WHERE g.group_name LIKE %s
+        {where_clause}
         GROUP BY g.id
         ORDER BY g.group_name
+        LIMIT %s OFFSET %s
         """
-        cursor.execute(query, (f'%{search_text}%',))
+        query_params = params + [page_size, offset]
+        logger.debug(f"执行SQL: {query}, 参数: {query_params}")
+        cursor.execute(query, query_params)
         groups = cursor.fetchall()
+        logger.debug(f"获取到 {len(groups)} 个邮箱组")
         
         # 为每个组获取成员邮箱
         for group in groups:
@@ -461,14 +637,107 @@ def search_groups(search_text):
             members = cursor.fetchall()
             group['memberEmails'] = [member['email'] for member in members]
         
-        return {'status': 'success', 'data': groups}
+        logger.info("成功获取邮箱组列表及其成员信息")
+        return {
+            'status': 'success', 
+            'items': groups,
+            'total': total,
+            'page': page,
+            'pageSize': page_size
+        }
     except Error as e:
-        logging.error(f"搜索邮箱组失败: {e}")
+        logger.error(f"获取邮箱组列表失败: {e}")
+        logger.error(traceback.format_exc())
+        return {'status': 'error', 'message': f'获取邮箱组列表失败: {str(e)}'}
+    finally:
+        try:
+            if cursor:
+                cursor.close()
+                logger.debug("游标已关闭")
+            if conn and conn.is_connected():
+                conn.close()
+                logger.debug("数据库连接已关闭")
+        except Exception as e:
+            logger.error(f"关闭数据库连接时出错: {e}")
+
+def search_groups(search_text, page=1, page_size=10):
+    """
+    搜索邮箱组，支持分页
+    """
+    logger.info(f"开始搜索邮箱组: 搜索文本={search_text}, 页码={page}, 每页数量={page_size}")
+    conn = None
+    cursor = None
+    try:
+        conn = connect_db()
+        if not conn:
+            logger.error("数据库连接失败")
+            return {'status': 'error', 'message': '数据库连接失败'}
+            
+        cursor = conn.cursor(dictionary=True)
+        
+        # 查询总数
+        count_query = """
+        SELECT COUNT(*) as total FROM autoreport_email_groups
+        WHERE group_name LIKE %s
+        """
+        cursor.execute(count_query, (f'%{search_text}%',))
+        total = cursor.fetchone()['total']
+        logger.debug(f"匹配邮箱组总数: {total}")
+        
+        # 计算分页
+        offset = (page - 1) * page_size
+        
+        # 搜索邮箱组
+        query = """
+        SELECT g.id, g.group_name, 
+               COUNT(m.email_id) as memberCount
+        FROM autoreport_email_groups g
+        LEFT JOIN autoreport_email_group_members m ON g.id = m.group_id
+        WHERE g.group_name LIKE %s
+        GROUP BY g.id
+        ORDER BY g.group_name
+        LIMIT %s OFFSET %s
+        """
+        cursor.execute(query, (f'%{search_text}%', page_size, offset))
+        groups = cursor.fetchall()
+        logger.debug(f"获取到 {len(groups)} 个邮箱组")
+        
+        # 为每个组获取成员邮箱
+        for group in groups:
+            group['id'] = str(group['id'])  # 将 group_id 转换为字符串
+            member_query = """
+            SELECT e.email
+            FROM autoreport_emails e
+            JOIN autoreport_email_group_members m ON e.id = m.email_id
+            WHERE m.group_id = %s
+            ORDER BY e.email
+            """
+            cursor.execute(member_query, (group['id'],))
+            members = cursor.fetchall()
+            group['memberEmails'] = [member['email'] for member in members]
+        
+        logger.info(f"成功搜索邮箱组，找到 {total} 个匹配结果")
+        return {
+            'status': 'success', 
+            'items': groups,
+            'total': total,
+            'page': page,
+            'pageSize': page_size
+        }
+    except Error as e:
+        logger.error(f"搜索邮箱组失败: {e}")
+        logger.error(traceback.format_exc())
         return {'status': 'error', 'message': f'搜索邮箱组失败: {str(e)}'}
     finally:
-        if conn.is_connected():
-            cursor.close()
-            conn.close()
+        try:
+            if cursor:
+                cursor.close()
+                logger.debug("游标已关闭")
+            if conn and conn.is_connected():
+                conn.close()
+                logger.debug("数据库连接已关闭")
+        except Exception as e:
+            logger.error(f"关闭数据库连接时出错: {e}")
 
 def add_group(group_data):
     """
@@ -786,6 +1055,81 @@ def delete_group(group_id):
         logger.error(f"删除邮箱组时发生未知错误: {error_msg}")
         logger.error(traceback.format_exc())
         return {'status': 'error', 'message': f'删除邮箱组时发生未知错误: {error_msg}'}
+    finally:
+        # 确保资源被正确关闭
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+        logger.debug("数据库连接已关闭")
+
+def batch_delete_groups(group_ids):
+    """
+    批量删除邮箱组
+    
+    Args:
+        group_ids: 要删除的邮箱组ID列表
+    """
+    logger.info(f"开始批量删除邮箱组: IDs={group_ids}")
+    conn = None
+    cursor = None
+    try:
+        conn = connect_db()
+        if not conn:
+            logger.error("数据库连接失败")
+            return {'status': 'error', 'message': '数据库连接失败'}
+        
+        cursor = conn.cursor()
+        
+        # 开始事务
+        conn.start_transaction()
+
+        # 确保所有ID都是字符串
+        group_ids = [str(group_id) for group_id in group_ids]
+        
+        # 构建IN子句的参数占位符
+        placeholders = ', '.join(['%s'] * len(group_ids))
+        
+        # 1. 删除邮箱组成员关系
+        delete_members_query = f"""
+        DELETE FROM autoreport_email_group_members 
+        WHERE group_id IN ({placeholders})
+        """
+        cursor.execute(delete_members_query, group_ids)
+        logger.debug(f"删除邮箱组成员关系成功，组IDs: {group_ids}")
+        
+        # 2. 删除邮箱组
+        delete_group_query = f"""
+        DELETE FROM autoreport_email_groups 
+        WHERE id IN ({placeholders})
+        """
+        cursor.execute(delete_group_query, group_ids)
+        logger.debug(f"删除邮箱组成功，IDs: {group_ids}")
+        
+        # 提交事务
+        conn.commit()
+        logger.info(f"批量删除邮箱组成功，共 {len(group_ids)} 个")
+        
+        return {
+            'status': 'success',
+            'message': f'成功删除 {len(group_ids)} 个邮箱组'
+        }
+    except Error as e:
+        # 回滚事务
+        if conn:
+            conn.rollback()
+        error_msg = str(e)
+        logger.error(f"批量删除邮箱组失败: {error_msg}")
+        logger.error(traceback.format_exc())
+        return {'status': 'error', 'message': f'批量删除邮箱组失败: {error_msg}'}
+    except Exception as e:
+        # 回滚事务
+        if conn:
+            conn.rollback()
+        error_msg = str(e)
+        logger.error(f"批量删除邮箱组时发生未知错误: {error_msg}")
+        logger.error(traceback.format_exc())
+        return {'status': 'error', 'message': f'批量删除邮箱组时发生未知错误: {error_msg}'}
     finally:
         # 确保资源被正确关闭
         if cursor:
