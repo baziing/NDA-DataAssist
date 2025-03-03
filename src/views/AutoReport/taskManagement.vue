@@ -348,6 +348,13 @@
         <el-button @click="downloadDialogVisible = false">关闭</el-button>
       </span>
     </el-dialog>
+    <DeleteConfirmationDialog
+      :visible="deleteConfirmVisible"
+      :message="deleteConfirmMessage"
+      :loading="deleteConfirmLoading"
+      @confirm="handleDeleteConfirm"
+      @cancel="deleteConfirmVisible = false"
+    />
   </div>
 </template>
 
@@ -355,9 +362,13 @@
 import moment from 'moment'
 import axios from 'axios'
 import settings from '@/settings'
+import DeleteConfirmationDialog from '@/components/DeleteConfirmationDialog.vue'
 
 export default {
   name: 'TaskManagement',
+  components: {
+    DeleteConfirmationDialog
+  },
   data() {
     return {
       gameCategories: [
@@ -401,7 +412,12 @@ export default {
       filesLoading: false,
       downloadDialogVisible: false,
       currentTask: null,
-      editOutputExample: ''
+      editOutputExample: '',
+      deleteConfirmVisible: false,
+      deleteConfirmMessage: '',
+      deleteConfirmLoading: false,
+      taskToDelete: null,
+      batchDeleteMode: false
     }
   },
   created() {
@@ -765,47 +781,18 @@ export default {
 
     // 删除任务
     handleDelete(row) {
-      this.$confirm('此操作将永久删除该任务, 是否继续?', '提示', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }).then(() => {
-        fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/task_management/task/${this.getTaskId(row)}`, {
-          method: 'DELETE'
-        })
-          .then(response => {
-            if (!response.ok) {
-              return response.json().then(data => {
-                throw new Error(data.message || '删除任务失败')
-              })
-            }
-            return response.json()
-          })
-          .then(data => {
-            this.$message.success(data.message || '删除成功!')
-            this.fetchTasks() // 刷新任务列表
-          })
-          .catch(error => {
-            console.error('删除任务失败:', error)
-            this.$message.error(`删除任务失败: ${error.message}`)
-          })
-      }).catch(() => {
-        this.$message.info('已取消删除')
-      })
+      this.deleteConfirmMessage = '此操作将永久删除该任务, 是否继续?'
+      this.deleteConfirmVisible = true
+      this.taskToDelete = row
+      this.batchDeleteMode = false
     },
 
-    // 批量删除任务
-    handleBatchDelete() {
-      if (this.multipleSelection.length === 0) {
-        this.$message.warning('请至少选择一个任务')
-        return
-      }
+    // 处理删除确认
+    handleDeleteConfirm() {
+      this.deleteConfirmLoading = true
 
-      this.$confirm(`此操作将永久删除选中的 ${this.multipleSelection.length} 个任务, 是否继续?`, '提示', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }).then(() => {
+      if (this.batchDeleteMode) {
+        // 批量删除逻辑
         const taskIds = this.multipleSelection.map(item => this.getTaskId(item))
 
         fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/task_management/tasks/batch_delete`, {
@@ -826,14 +813,57 @@ export default {
           .then(data => {
             this.$message.success(data.message || '批量删除成功!')
             this.fetchTasks() // 刷新任务列表
+            this.deleteConfirmVisible = false
+            this.batchDeleteMode = false
           })
           .catch(error => {
             console.error('批量删除任务失败:', error)
             this.$message.error(`批量删除任务失败: ${error.message}`)
+            this.deleteConfirmVisible = false
+            this.batchDeleteMode = false
           })
-      }).catch(() => {
-        this.$message.info('已取消删除')
-      })
+          .finally(() => {
+            this.deleteConfirmLoading = false
+          })
+      } else {
+        // 单个删除逻辑
+        fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/task_management/task/${this.getTaskId(this.taskToDelete)}`, {
+          method: 'DELETE'
+        })
+          .then(response => {
+            if (!response.ok) {
+              return response.json().then(data => {
+                throw new Error(data.message || '删除任务失败')
+              })
+            }
+            return response.json()
+          })
+          .then(data => {
+            this.$message.success(data.message || '删除成功!')
+            this.fetchTasks() // 刷新任务列表
+            this.deleteConfirmVisible = false
+          })
+          .catch(error => {
+            console.error('删除任务失败:', error)
+            this.$message.error(`删除任务失败: ${error.message}`)
+            this.deleteConfirmVisible = false
+          })
+          .finally(() => {
+            this.deleteConfirmLoading = false
+          })
+      }
+    },
+
+    // 批量删除任务
+    handleBatchDelete() {
+      if (this.multipleSelection.length === 0) {
+        this.$message.warning('请至少选择一个任务')
+        return
+      }
+
+      this.deleteConfirmMessage = `此操作将永久删除选中的 ${this.multipleSelection.length} 个任务, 是否继续?`
+      this.deleteConfirmVisible = true
+      this.batchDeleteMode = true
     },
 
     // 获取任务ID
