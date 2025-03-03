@@ -1,7 +1,7 @@
 import os
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, send_from_directory, Response
 from flask_cors import CORS
 import uuid
 import threading
@@ -9,6 +9,7 @@ import time
 import logging
 from datetime import datetime
 import pandas as pd
+import traceback
 
 from dotenv import load_dotenv
 from pathlib import Path
@@ -24,9 +25,16 @@ import sqlparse
 import mysql.connector
 from backend.task_management import register_task_management_routes
 from backend.file_name_formatter import format_filename
+from backend import task_scheduler
+from backend.email_management import (
+    get_all_emails, search_emails, add_email, update_email, delete_email,
+    get_all_groups, search_groups, add_group, update_group, delete_group,
+    get_group_members, update_group_members, get_report_options
+)
 
 app = Flask(__name__, static_folder='../../dist', static_url_path='/')
-CORS(app)
+# 启用CORS支持，允许所有来源
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # 数据库配置
 app.config['DB_CONFIG'] = DB_CONFIG
@@ -36,6 +44,21 @@ task_scheduler = TaskScheduler()
 
 # 注册任务管理相关的路由，传入task_scheduler实例
 register_task_management_routes(app, task_scheduler)
+
+# 添加错误处理中间件
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """全局异常处理"""
+    # 打印详细错误信息到控制台
+    print(f"发生错误: {str(e)}")
+    print(traceback.format_exc())
+    
+    # 返回JSON格式的错误响应
+    response = {
+        "error": str(e),
+        "type": e.__class__.__name__
+    }
+    return jsonify(response), 500
 
 @app.route('/check_excel_file', methods=['POST'])
 def check_excel_file_api():
@@ -430,10 +453,292 @@ def upload_vars():
     else:
         return jsonify({'error': 'Invalid file type'}), 400
         
+# 邮箱管理API
+@app.route('/emails', methods=['GET'])
+def get_emails_api():
+    """获取所有邮箱"""
+    result = get_all_emails()
+    if result['status'] == 'success':
+        return jsonify(result['data']), 200
+    else:
+        return jsonify({'error': result['message']}), 400
+
+@app.route('/emails/search', methods=['GET'])
+def search_emails_api():
+    """搜索邮箱"""
+    search_text = request.args.get('q', '')
+    result = search_emails(search_text)
+    if result['status'] == 'success':
+        return jsonify(result['data']), 200
+    else:
+        return jsonify({'error': result['message']}), 400
+
+@app.route('/emails', methods=['POST'])
+def add_email_api():
+    """添加邮箱"""
+    email_data = request.json
+    result = add_email(email_data)
+    if result['status'] == 'success':
+        return jsonify({'message': result['message'], 'id': result.get('id')}), 201
+    else:
+        return jsonify({'error': result['message']}), 400
+
+@app.route('/emails/<int:email_id>', methods=['PUT'])
+def update_email_api(email_id):
+    """更新邮箱"""
+    email_data = request.json
+    email_data['id'] = email_id
+    result = update_email(email_data)
+    if result['status'] == 'success':
+        return jsonify({'message': result['message']}), 200
+    else:
+        return jsonify({'error': result['message']}), 400
+
+@app.route('/emails/<int:email_id>', methods=['DELETE'])
+def delete_email_api(email_id):
+    """删除邮箱"""
+    result = delete_email(email_id)
+    if result['status'] == 'success':
+        return jsonify({'message': result['message']}), 200
+    else:
+        return jsonify({'error': result['message']}), 400
+
+# 邮箱组管理API
+@app.route('/email-groups', methods=['GET'])
+def get_groups_api():
+    """获取所有邮箱组"""
+    result = get_all_groups()
+    if result['status'] == 'success':
+        return jsonify(result['data']), 200
+    else:
+        return jsonify({'error': result['message']}), 400
+
+@app.route('/email-groups/search', methods=['GET'])
+def search_groups_api():
+    """搜索邮箱组"""
+    search_text = request.args.get('q', '')
+    result = search_groups(search_text)
+    if result['status'] == 'success':
+        return jsonify(result['data']), 200
+    else:
+        return jsonify({'error': result['message']}), 400
+
+@app.route('/email-groups', methods=['POST'])
+def add_group_api():
+    """添加邮箱组"""
+    group_data = request.json
+    result = add_group(group_data)
+    if result['status'] == 'success':
+        return jsonify({'message': result['message'], 'id': result.get('id')}), 201
+    else:
+        return jsonify({'error': result['message']}), 400
+
+@app.route('/email-groups/<int:group_id>', methods=['PUT'])
+def update_group_api(group_id):
+    """更新邮箱组"""
+    group_data = request.json
+    group_data['id'] = group_id
+    result = update_group(group_data)
+    if result['status'] == 'success':
+        return jsonify({'message': result['message']}), 200
+    else:
+        return jsonify({'error': result['message']}), 400
+
+@app.route('/email-groups/<int:group_id>', methods=['DELETE'])
+def delete_group_api(group_id):
+    """删除邮箱组"""
+    result = delete_group(group_id)
+    if result['status'] == 'success':
+        return jsonify({'message': result['message']}), 200
+    else:
+        return jsonify({'error': result['message']}), 400
+
+@app.route('/email-groups/<int:group_id>/members', methods=['GET'])
+def get_group_members_api(group_id):
+    """获取邮箱组成员"""
+    result = get_group_members(group_id)
+    if result['status'] == 'success':
+        return jsonify(result['data']), 200
+    else:
+        return jsonify({'error': result['message']}), 400
+
+@app.route('/email-groups/<int:group_id>/members', methods=['PUT'])
+def update_group_members_api(group_id):
+    """更新邮箱组成员"""
+    member_ids = request.json.get('memberIds', [])
+    result = update_group_members(group_id, member_ids)
+    if result['status'] == 'success':
+        return jsonify({'message': result['message']}), 200
+    else:
+        return jsonify({'error': result['message']}), 400
+
+@app.route('/report-options', methods=['GET'])
+def get_report_options_api():
+    """获取报表选项"""
+    result = get_report_options()
+    if result['status'] == 'success':
+        return jsonify(result['data']), 200
+    else:
+        return jsonify({'error': result['message']}), 400
+
+# 健康检查API
+@app.route('/health', methods=['GET'])
+def health_check():
+    """健康检查API"""
+    try:
+        # 尝试连接数据库
+        conn = connect_db()
+        conn.close()
+        
+        return jsonify({
+            'status': 'ok',
+            'message': '服务器运行正常',
+            'timestamp': datetime.now().isoformat()
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'服务器异常: {str(e)}',
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
+# 简单的测试API
+@app.route('/ping', methods=['GET'])
+def ping():
+    """简单的测试API，用于检查服务器是否正常运行"""
+    print("收到ping请求")
+    return jsonify({
+        'status': 'success',
+        'message': '服务器正常运行',
+        'time': str(datetime.now())
+    })
+
+# 数据库连接测试API
+@app.route('/db-test', methods=['GET'])
+def db_test():
+    """测试数据库连接"""
+    try:
+        # 尝试连接数据库
+        conn = connect_db()
+        if not conn:
+            return jsonify({
+                'status': 'error',
+                'message': '数据库连接失败',
+                'time': str(datetime.now())
+            }), 500
+            
+        # 尝试执行简单查询
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1")
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            'status': 'success',
+            'message': '数据库连接成功',
+            'result': result,
+            'time': str(datetime.now())
+        })
+    except Exception as e:
+        print(f"数据库连接测试失败: {e}")
+        print(traceback.format_exc())
+        return jsonify({
+            'status': 'error',
+            'message': f'数据库连接测试失败: {str(e)}',
+            'time': str(datetime.now())
+        }), 500
+
+# 检查数据库表是否存在，如果不存在则创建
+def check_and_create_tables():
+    """检查数据库表是否存在，如果不存在则创建"""
+    try:
+        conn = connect_db()
+        if not conn:
+            print("数据库连接失败，无法检查和创建表")
+            return False
+            
+        cursor = conn.cursor()
+        
+        # 检查邮箱表
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS `autoreport_emails` (
+          `id` INT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+          `email` VARCHAR(255) NOT NULL COMMENT '邮箱地址',
+          `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+          `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+          UNIQUE KEY `idx_email_unique` (`email`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='存储所有邮箱地址'
+        """)
+        
+        # 检查邮箱组表
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS `autoreport_email_groups` (
+          `id` INT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+          `group_name` VARCHAR(255) NOT NULL COMMENT '邮箱组名称',
+          `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+          `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='存储邮箱组信息'
+        """)
+        
+        # 检查邮箱组成员表
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS `autoreport_email_group_members` (
+          `id` INT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+          `email_id` INT NOT NULL COMMENT '关联到autoreport_emails表的主键',
+          `group_id` INT NOT NULL COMMENT '关联到autoreport_email_groups表的主键',
+          `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+          `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+          CONSTRAINT `fk_egm_email_id` FOREIGN KEY (`email_id`)
+            REFERENCES `autoreport_emails`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+          CONSTRAINT `fk_egm_group_id` FOREIGN KEY (`group_id`)
+            REFERENCES `autoreport_email_groups`(`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+          UNIQUE KEY `idx_email_group_unique` (`email_id`, `group_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='邮箱与组的多对多关联关系'
+        """)
+        
+        # 检查任务接收者表
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS `autoreport_task_recipients` (
+          `id` INT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+          `task_id` INT NOT NULL COMMENT '关联到autoreport_tasks表的id',
+          `email_id` INT DEFAULT NULL COMMENT '关联到autoreport_emails表的id（单个邮箱）',
+          `group_id` INT DEFAULT NULL COMMENT '关联到autoreport_email_groups表的id（邮箱组）',
+          `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+          `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+          KEY `idx_task_id` (`task_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='管理任务与邮箱/邮箱组的多对多关联'
+        """)
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        print("数据库表检查和创建完成")
+        return True
+    except Exception as e:
+        print(f"检查和创建数据库表时出错: {e}")
+        print(traceback.format_exc())
+        return False
+
 if __name__ == '__main__':
+    # 检查和创建数据库表
+    check_and_create_tables()
+    
     # 创建并启动调度器线程
     scheduler_thread = threading.Thread(target=task_scheduler.start)
     scheduler_thread.daemon = True  # 设置为守护线程，以便主线程退出时自动退出
     scheduler_thread.start()
-
-    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('VUE_APP_API_PORT')))
+    
+    # 获取端口号，默认为5000
+    port = int(os.environ.get('VUE_APP_API_PORT', 5000))
+    
+    print("\n" + "="*50)
+    print(f"后端服务器启动在 http://localhost:{port}")
+    print(f"测试API: http://localhost:{port}/ping")
+    print(f"数据库测试: http://localhost:{port}/db-test")
+    print(f"邮箱API: http://localhost:{port}/emails")
+    print("="*50 + "\n")
+    
+    # 启动Flask应用
+    app.run(debug=True, host='0.0.0.0', port=port)

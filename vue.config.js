@@ -38,16 +38,12 @@ module.exports = {
     },
     before: require('./mock/mock-server.js'),
     proxy: {
-      '/dev-api': {
-        target: `http://localhost:${process.env.VUE_APP_API_PORT}`,
+      [process.env.VUE_APP_BASE_API]: {
+        target: `http://localhost:${process.env.VUE_APP_API_PORT || 5000}`,
         changeOrigin: true,
         pathRewrite: {
-          '^/dev-api': ''
+          ['^' + process.env.VUE_APP_BASE_API]: ''
         }
-      },
-      '/task_management': {
-        target: 'http://localhost:5002', // 后端API服务器地址
-        changeOrigin: true
       }
     }
   },

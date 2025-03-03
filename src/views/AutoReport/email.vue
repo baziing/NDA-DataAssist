@@ -149,7 +149,7 @@
             border
             style="width: 100%"
           >
-            <el-table-column prop="name" label="组名称" min-width="150" />
+            <el-table-column prop="group_name" label="组名称" min-width="150" />
             <el-table-column prop="memberCount" label="成员数量" width="100" />
             <el-table-column prop="memberEmails" label="成员邮箱" min-width="500">
               <template slot-scope="scope">
@@ -291,6 +291,60 @@
 </template>
 
 <script>
+import axios from 'axios'
+import { getToken } from '@/utils/auth'
+
+// 创建一个axios实例，设置基础URL和请求头
+const apiClient = axios.create({
+  // 直接使用完整的后端URL
+  baseURL: 'http://localhost:5002',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  timeout: 30000 // 设置超时时间为30秒
+})
+
+// 添加请求拦截器
+apiClient.interceptors.request.use(
+  config => {
+    // 在发送请求之前做些什么
+    const token = getToken()
+    if (token) {
+      config.headers['X-Token'] = token
+    }
+    return config
+  },
+  error => {
+    // 对请求错误做些什么
+    console.error('请求错误:', error)
+    return Promise.reject(error)
+  }
+)
+
+// 添加响应拦截器
+apiClient.interceptors.response.use(
+  response => {
+    // 对响应数据做点什么
+    return response
+  },
+  error => {
+    // 对响应错误做点什么
+    console.error('响应错误:', error)
+    if (error.response) {
+      // 服务器返回了错误状态码
+      console.error('错误状态码:', error.response.status)
+      console.error('错误数据:', error.response.data)
+    } else if (error.request) {
+      // 请求已经发出，但没有收到响应
+      console.error('没有收到响应:', error.request)
+    } else {
+      // 在设置请求时发生了一些事情，触发了错误
+      console.error('请求配置错误:', error.message)
+    }
+    return Promise.reject(error)
+  }
+)
+
 export default {
   name: 'EmailManagement',
   data() {
@@ -360,57 +414,45 @@ export default {
     // 邮箱管理方法
     fetchEmails() {
       this.loading = true
-      // 模拟API调用
-      setTimeout(() => {
-        this.emailList = [
-          {
-            id: 1,
-            email: 'user1@example.com',
-            groups: [
-              { value: 1, label: '管理组' },
-              { value: 2, label: '技术组' }
-            ],
-            reports: [
-              { id: 1, name: '日报' },
-              { id: 2, name: '周报' }
-            ]
-          },
-          {
-            id: 2,
-            email: 'user2@example.com',
-            groups: [
-              { value: 1, label: '管理组' }
-            ],
-            reports: [
-              { id: 1, name: '日报' }
-            ]
-          },
-          {
-            id: 3,
-            email: 'user3@example.com',
-            groups: [
-              { value: 3, label: '市场组' }
-            ],
-            reports: [
-              { id: 3, name: '月报' }
-            ]
-          }
-        ]
-
-        // 更新邮箱选项
-        this.allEmailOptions = this.emailList.map(item => ({
-          id: item.id,
-          email: item.email
-        }))
-
-        this.loading = false
-      }, 500)
+      apiClient.get('/emails')
+        .then(response => {
+          this.emailList = response.data.map(email => ({
+            ...email,
+            id: String(email.id),
+            groups: email.groups ? email.groups.map(group => ({ ...group, value: String(group.value) })) : [],
+            reports: email.reports ? email.reports.map(report => ({ ...report, id: String(report.id) })) : []
+          }))
+          // 更新邮箱选项
+          this.allEmailOptions = this.emailList.map(item => ({
+            id: item.id,
+            email: item.email
+          }))
+          this.loading = false
+        })
+        .catch(error => {
+          console.error('获取邮箱列表失败:', error)
+          this.$message.error('获取邮箱列表失败')
+          this.loading = false
+        })
     },
 
     searchEmails() {
-      // 实现邮箱搜索功能
-      console.log('搜索邮箱:', this.emailSearchText)
-      // 调用API进行搜索
+      this.loading = true
+      apiClient.get(`/emails/search?q=${this.emailSearchText}`)
+        .then(response => {
+          this.emailList = response.data.map(email => ({
+            ...email,
+            id: String(email.id),
+            groups: email.groups ? email.groups.map(group => ({ ...group, value: String(group.value) })) : [],
+            reports: email.reports ? email.reports.map(report => ({ ...report, id: String(report.id) })) : []
+          }))
+          this.loading = false
+        })
+        .catch(error => {
+          console.error('搜索邮箱失败:', error)
+          this.$message.error('搜索邮箱失败')
+          this.loading = false
+        })
     },
 
     showEmailModal() {
@@ -427,10 +469,10 @@ export default {
     editEmail(row) {
       this.emailFormMode = 'edit'
       this.emailForm = {
-        id: row.id,
+        id: String(row.id), // 将 row.id 转换为字符串
         email: row.email,
         groups: row.groups ? row.groups.map(g => g.value) : [],
-        reports: row.reports ? row.reports.map(r => r.id) : []
+        reports: row.reports ? row.reports.map(r => String(r.id)) : [] // 将 report ID 转换为字符串
       }
       this.emailModalVisible = true
     },
@@ -438,77 +480,127 @@ export default {
     handleEmailSubmit() {
       this.$refs.emailFormRef.validate(valid => {
         if (valid) {
-          // 提交表单逻辑
-          if (this.emailFormMode === 'add') {
-            // 添加邮箱API调用
-            console.log('添加邮箱:', this.emailForm)
-          } else {
-            // 更新邮箱API调用
-            console.log('更新邮箱:', this.emailForm)
+          // 在提交前，确保 reports 数组中的 ID 都是字符串
+          const emailData = {
+            ...this.emailForm,
+            reports: this.emailForm.reports ? this.emailForm.reports.map(id => String(id)) : []
           }
-          this.emailModalVisible = false
-          this.fetchEmails()
+
+          this.loading = true
+          if (this.emailFormMode === 'add') {
+            apiClient.post('/emails', emailData)
+              .then(response => {
+                this.$message.success('邮箱添加成功')
+                this.emailModalVisible = false
+                this.fetchEmails()
+              })
+              .catch(error => {
+                console.error('添加邮箱失败:', error)
+                let errorMsg = '添加邮箱失败'
+                if (error.response && error.response.data && error.response.data.error) {
+                  errorMsg = error.response.data.error
+                } else if (error.message) {
+                  errorMsg = `添加邮箱失败: ${error.message}`
+                }
+                this.$message.error(errorMsg)
+
+                if (error.message && error.message.includes('Network Error')) {
+                  this.$message.error('网络错误: 请确保后端服务器已启动并且可以访问')
+                  console.error('建议: 请检查后端服务器是否已启动，并尝试访问 http://localhost:5002/test')
+                }
+              })
+              .finally(() => {
+                this.loading = false
+              })
+          } else {
+            apiClient.put(`/emails/${this.emailForm.id}`, emailData)
+              .then(response => {
+                this.$message.success('邮箱更新成功')
+                this.emailModalVisible = false
+                this.fetchEmails()
+              })
+              .catch(error => {
+                console.error('更新邮箱失败:', error)
+                let errorMsg = '更新邮箱失败'
+                if (error.response && error.response.data && error.response.data.error) {
+                  errorMsg = error.response.data.error
+                } else if (error.message) {
+                  errorMsg = `更新邮箱失败: ${error.message}`
+                }
+                this.$message.error(errorMsg)
+
+                if (error.message && error.message.includes('Network Error')) {
+                  this.$message.error('网络错误: 请确保后端服务器已启动并且可以访问')
+                  console.error('建议: 请检查后端服务器是否已启动，并尝试访问 http://localhost:5002/test')
+                }
+              })
+              .finally(() => {
+                this.loading = false
+              })
+          }
         }
       })
     },
 
     deleteEmail(id) {
-      // 删除邮箱API调用
-      console.log('删除邮箱ID:', id)
-      this.fetchEmails()
+      this.loading = true
+      apiClient.delete(`/emails/${String(id)}`) // 将 id 转换为字符串
+        .then(response => {
+          this.$message.success('邮箱删除成功')
+          this.fetchEmails()
+        })
+        .catch(error => {
+          console.error('删除邮箱失败:', error)
+          this.$message.error(error.response?.data?.error || '删除邮箱失败')
+        })
+        .finally(() => {
+          this.loading = false
+        })
     },
 
     fetchReportOptions() {
-      // 获取报表选项
-      this.reportOptions = [
-        { id: 1, name: '日报' },
-        { id: 2, name: '周报' },
-        { id: 3, name: '月报' },
-        { id: 4, name: '季报' },
-        { id: 5, name: '年报' }
-      ]
+      apiClient.get('/report-options')
+        .then(response => {
+          this.reportOptions = response.data
+        })
+        .catch(error => {
+          console.error('获取报表选项失败:', error)
+          this.$message.error('获取报表选项失败')
+        })
     },
 
     // 邮箱组管理方法
     fetchGroups() {
       this.loading = true
-      // 模拟API调用
-      setTimeout(() => {
-        this.groupList = [
-          {
-            id: 1,
-            name: '管理组',
-            memberCount: 11,
-            memberEmails: ['何博凯', '何沛贤', '胡康诚', '白晓圆', '詹翼翔', '何博凯', '何博凯', '何博凯', '何博凯', '何博凯', '显示全部']
-          },
-          {
-            id: 2,
-            name: '技术组',
-            memberCount: 4,
-            memberEmails: ['tech1@example.com', 'tech2@example.com', 'tech3@example.com', 'tech4@example.com']
-          },
-          {
-            id: 3,
-            name: '市场组',
-            memberCount: 2,
-            memberEmails: ['marketing1@example.com', 'marketing2@example.com']
-          }
-        ]
-
-        // 更新分组选项
-        this.groupOptions = this.groupList.map(item => ({
-          value: item.id,
-          label: item.name
-        }))
-
-        this.loading = false
-      }, 500)
+      apiClient.get('/email-groups')
+        .then(response => {
+          this.groupList = response.data
+          // 更新分组选项
+          this.groupOptions = this.groupList.map(item => ({
+            value: item.id,
+            label: item.name
+          }))
+          this.loading = false
+        })
+        .catch(error => {
+          console.error('获取邮箱组列表失败:', error)
+          this.$message.error('获取邮箱组列表失败')
+          this.loading = false
+        })
     },
 
     searchGroups() {
-      // 实现邮箱组搜索功能
-      console.log('搜索邮箱组:', this.groupSearchText)
-      // 调用API进行搜索
+      this.loading = true
+      apiClient.get(`/email-groups/search?q=${this.groupSearchText}`)
+        .then(response => {
+          this.groupList = response.data
+          this.loading = false
+        })
+        .catch(error => {
+          console.error('搜索邮箱组失败:', error)
+          this.$message.error('搜索邮箱组失败')
+          this.loading = false
+        })
     },
 
     showGroupModal() {
@@ -525,50 +617,100 @@ export default {
       this.groupFormMode = 'edit'
       this.groupForm = {
         id: row.id,
-        name: row.name,
-        members: [] // 这里应该获取当前组的成员ID列表
+        name: row.group_name, // 修改这里
+        members: [] // 这里需要获取当前组的成员
       }
-      this.groupModalVisible = true
+
+      // 获取当前组的成员
+      apiClient.get(`/email-groups/${row.id}/members`)
+        .then(response => {
+          this.groupForm.members = response.data.map(item => item.id)
+          this.groupModalVisible = true
+        })
+        .catch(error => {
+          console.error('获取组成员失败:', error)
+          this.$message.error('获取组成员失败')
+        })
     },
 
     handleGroupSubmit() {
       this.$refs.groupFormRef.validate(valid => {
         if (valid) {
-          // 提交表单逻辑
+          this.loading = true
           if (this.groupFormMode === 'add') {
             // 添加邮箱组API调用
-            console.log('添加邮箱组:', this.groupForm)
+            apiClient.post('/email-groups', this.groupForm)
+              .then(response => {
+                this.$message.success('邮箱组添加成功')
+                this.groupModalVisible = false
+                this.fetchGroups()
+              })
+              .catch(error => {
+                console.error('添加邮箱组失败:', error)
+                this.$message.error(error.response?.data?.error || '添加邮箱组失败')
+              })
+              .finally(() => {
+                this.loading = false
+              })
           } else {
             // 更新邮箱组API调用
-            console.log('更新邮箱组:', this.groupForm)
+            apiClient.put(`/email-groups/${this.groupForm.id}`, this.groupForm)
+              .then(response => {
+                this.$message.success('邮箱组更新成功')
+                this.groupModalVisible = false
+                this.fetchGroups()
+              })
+              .catch(error => {
+                console.error('更新邮箱组失败:', error)
+                this.$message.error(error.response?.data?.error || '更新邮箱组失败')
+              })
+              .finally(() => {
+                this.loading = false
+              })
           }
-          this.groupModalVisible = false
-          this.fetchGroups()
         }
       })
     },
 
     deleteGroup(id) {
-      // 删除邮箱组API调用
-      console.log('删除邮箱组ID:', id)
-      this.fetchGroups()
+      this.loading = true
+      apiClient.delete(`/email-groups/${id}`)
+        .then(response => {
+          this.$message.success('邮箱组删除成功')
+          this.fetchGroups()
+        })
+        .catch(error => {
+          console.error('删除邮箱组失败:', error)
+          this.$message.error(error.response?.data?.error || '删除邮箱组失败')
+        })
+        .finally(() => {
+          this.loading = false
+        })
     },
 
     // 邮箱组成员管理
     manageGroupMembers(group) {
       this.currentGroupId = group.id
+
       // 获取所有邮箱
-      this.allEmails = this.emailList.map(item => ({
-        id: item.id,
-        email: item.email
-      }))
+      apiClient.get('/emails')
+        .then(response => {
+          this.allEmails = response.data.map(item => ({
+            id: String(item.id), // 将 id 转换为字符串
+            email: item.email
+          }))
 
-      // 获取当前组的成员
-      // 这里应该调用API获取当前组的成员ID列表
-      // 模拟数据
-      this.selectedEmailIds = [1, 3] // 假设ID为1和3的邮箱已在组内
-
-      this.memberModalVisible = true
+          // 获取当前组的成员
+          return apiClient.get(`/email-groups/${group.id}/members`)
+        })
+        .then(response => {
+          this.selectedEmailIds = response.data.map(item => String(item.id))
+          this.memberModalVisible = true
+        })
+        .catch(error => {
+          console.error('获取邮箱或组成员失败:', error)
+          this.$message.error('获取邮箱或组成员失败')
+        })
     },
 
     handleMemberChange(value, direction, movedKeys) {
@@ -576,14 +718,23 @@ export default {
     },
 
     handleMemberSubmit() {
-      // 保存邮箱组成员变更
-      // 调用API更新组成员
-      console.log('更新邮箱组成员:', {
-        groupId: this.currentGroupId,
-        memberIds: this.selectedEmailIds
+      this.loading = true
+      // 保存邮箱组成员变更, 确保ID是字符串
+      apiClient.put(`/email-groups/${String(this.currentGroupId)}/members`, {
+        memberIds: this.selectedEmailIds.map(id => String(id))
       })
-      this.memberModalVisible = false
-      this.fetchGroups()
+        .then(response => {
+          this.$message.success('邮箱组成员更新成功')
+          this.memberModalVisible = false
+          this.fetchGroups()
+        })
+        .catch(error => {
+          console.error('更新邮箱组成员失败:', error)
+          this.$message.error(error.response?.data?.error || '更新邮箱组成员失败')
+        })
+        .finally(() => {
+          this.loading = false
+        })
     },
 
     // 查看全部成员
