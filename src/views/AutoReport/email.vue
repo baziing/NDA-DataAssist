@@ -24,7 +24,9 @@
             :data="emailList"
             border
             style="width: 100%"
+            @selection-change="handleEmailSelectionChange"
           >
+            <el-table-column type="selection" width="55" />
             <el-table-column prop="email" label="邮箱地址" min-width="180" />
             <el-table-column prop="groups" label="所属分组" min-width="200">
               <template slot-scope="scope">
@@ -72,6 +74,19 @@
               </template>
             </el-table-column>
           </el-table>
+
+          <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center;">
+            <el-button type="danger" :disabled="selectedEmails.length === 0" @click="handleBatchDeleteEmail">批量删除</el-button>
+            <el-pagination
+              :current-page="emailCurrentPage"
+              :page-sizes="[10, 20, 50]"
+              :page-size="emailPageSize"
+              layout="total, sizes, prev, pager, next, jumper"
+              :total="emailTotal"
+              @size-change="handleEmailSizeChange"
+              @current-change="handleEmailCurrentChange"
+            />
+          </div>
 
           <!-- 删除确认对话框 -->
           <delete-confirmation-dialog
@@ -153,7 +168,9 @@
             :data="groupList"
             border
             style="width: 100%"
+            @selection-change="handleGroupSelectionChange"
           >
+            <el-table-column type="selection" width="55" />
             <el-table-column prop="group_name" label="组名称" min-width="150" />
             <el-table-column prop="memberCount" label="成员数量" width="100" />
             <el-table-column prop="memberEmails" label="成员邮箱" min-width="500">
@@ -204,6 +221,19 @@
               </template>
             </el-table-column>
           </el-table>
+
+          <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center;">
+            <el-button type="danger" :disabled="selectedGroups.length === 0" @click="handleBatchDeleteGroup">批量删除</el-button>
+            <el-pagination
+              :current-page="groupCurrentPage"
+              :page-sizes="[10, 20, 50]"
+              :page-size="groupPageSize"
+              layout="total, sizes, prev, pager, next, jumper"
+              :total="groupTotal"
+              @size-change="handleGroupSizeChange"
+              @current-change="handleGroupCurrentChange"
+            />
+          </div>
 
           <!-- 邮箱组表单弹窗 -->
           <el-dialog
@@ -382,10 +412,16 @@ export default {
           { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }
         ]
       },
+      // 邮箱分页
+      emailCurrentPage: 1,
+      emailPageSize: 10,
+      emailTotal: 0,
+      selectedEmails: [],
 
       // 删除确认
       deleteTargetId: null,
       deleteDialogVisible: false,
+      batchDeleteMode: false,
 
       // 邮箱组管理
       groupList: [],
@@ -402,6 +438,11 @@ export default {
           { required: true, message: '请输入组名称', trigger: 'blur' }
         ]
       },
+      // 邮箱组分页
+      groupCurrentPage: 1,
+      groupPageSize: 10,
+      groupTotal: 0,
+      selectedGroups: [],
 
       // 邮箱组成员管理
       memberModalVisible: false,
@@ -431,10 +472,10 @@ export default {
     // 邮箱管理方法
     fetchEmails() {
       this.loading = true
-      apiClient.get('/emails')
+      apiClient.get(`/emails?page=${this.emailCurrentPage}&pageSize=${this.emailPageSize}&q=${this.emailSearchText}`)
         .then(response => {
           console.log('获取到的邮箱数据:', response.data)
-          this.emailList = response.data.map(email => ({
+          this.emailList = response.data.items.map(email => ({
             ...email,
             id: String(email.id),
             groups: email.groups ? email.groups.map(group => ({
@@ -446,6 +487,7 @@ export default {
               id: String(report.id)
             })) : []
           }))
+          this.emailTotal = response.data.total || this.emailList.length
           // 更新邮箱选项
           this.allEmailOptions = this.emailList.map(item => ({
             id: item.id,
@@ -461,11 +503,12 @@ export default {
     },
 
     searchEmails() {
+      this.emailCurrentPage = 1 // 重置为第一页
       this.loading = true
-      apiClient.get(`/emails/search?q=${this.emailSearchText}`)
+      apiClient.get(`/emails/search?q=${this.emailSearchText}&page=${this.emailCurrentPage}&pageSize=${this.emailPageSize}`)
         .then(response => {
           console.log('搜索到的邮箱数据:', response.data)
-          this.emailList = response.data.map(email => ({
+          this.emailList = response.data.items.map(email => ({
             ...email,
             id: String(email.id),
             groups: email.groups ? email.groups.map(group => ({
@@ -477,6 +520,7 @@ export default {
               id: String(report.id)
             })) : []
           }))
+          this.emailTotal = response.data.total || this.emailList.length
           this.loading = false
         })
         .catch(error => {
@@ -484,6 +528,32 @@ export default {
           this.$message.error('搜索邮箱失败')
           this.loading = false
         })
+    },
+
+    // 邮箱分页方法
+    handleEmailSizeChange(size) {
+      this.emailPageSize = size
+      this.fetchEmails()
+    },
+
+    handleEmailCurrentChange(page) {
+      this.emailCurrentPage = page
+      this.fetchEmails()
+    },
+
+    // 邮箱选择变化
+    handleEmailSelectionChange(val) {
+      this.selectedEmails = val
+    },
+
+    // 批量删除邮箱
+    handleBatchDeleteEmail() {
+      if (this.selectedEmails.length === 0) {
+        this.$message.warning('请至少选择一个邮箱')
+        return
+      }
+      this.batchDeleteMode = true
+      this.deleteDialogVisible = true
     },
 
     showEmailModal() {
@@ -583,40 +653,69 @@ export default {
     },
 
     handleConfirmDelete() {
-      if (!this.deleteTargetId) return
+      if (this.batchDeleteMode) {
+        // 批量删除邮箱
+        const emailIds = this.selectedEmails.map(item => item.id)
+        this.loading = true
+        apiClient
+          .post('/emails/batch-delete', { ids: emailIds })
+          .then((response) => {
+            this.$message.success('批量删除邮箱成功')
+            this.fetchEmails()
+          })
+          .catch((error) => {
+            console.error('批量删除邮箱失败:', error)
+            let errorMsg = '批量删除邮箱失败'
+            if (error.response && error.response.data && error.response.data.error) {
+              errorMsg = error.response.data.error
+            } else if (error.message) {
+              errorMsg = `批量删除邮箱失败: ${error.message}`
+            }
+            this.$message.error(errorMsg)
+          })
+          .finally(() => {
+            this.loading = false
+            this.deleteDialogVisible = false
+            this.batchDeleteMode = false
+          })
+      } else if (!this.deleteTargetId) {
+        return
+      } else {
+        // 单个删除邮箱
+        this.loading = true
+        apiClient
+          .delete(`/emails/${String(this.deleteTargetId)}`)
+          .then((response) => {
+            this.$message.success('邮箱删除成功')
+            this.fetchEmails()
+          })
+          .catch((error) => {
+            console.error('删除邮箱失败:', error)
+            let errorMsg = '删除邮箱失败'
+            if (error.response && error.response.data && error.response.data.error) {
+              errorMsg = error.response.data.error
+            } else if (error.message) {
+              errorMsg = `删除邮箱失败: ${error.message}`
+            }
+            this.$message.error(errorMsg)
 
-      this.loading = true
-      apiClient
-        .delete(`/emails/${String(this.deleteTargetId)}`)
-        .then((response) => {
-          this.$message.success('邮箱删除成功')
-          this.fetchEmails()
-        })
-        .catch((error) => {
-          console.error('删除邮箱失败:', error)
-          let errorMsg = '删除邮箱失败'
-          if (error.response && error.response.data && error.response.data.error) {
-            errorMsg = error.response.data.error
-          } else if (error.message) {
-            errorMsg = `删除邮箱失败: ${error.message}`
-          }
-          this.$message.error(errorMsg)
-
-          if (error.message && error.message.includes('Network Error')) {
-            this.$message.error('网络错误: 请确保后端服务器已启动并且可以访问')
-            console.error('建议: 请检查后端服务器是否已启动，并尝试访问 http://localhost:5002/test')
-          }
-        })
-        .finally(() => {
-          this.loading = false
-          this.deleteDialogVisible = false
-          this.deleteTargetId = null
-        })
+            if (error.message && error.message.includes('Network Error')) {
+              this.$message.error('网络错误: 请确保后端服务器已启动并且可以访问')
+              console.error('建议: 请检查后端服务器是否已启动，并尝试访问 http://localhost:5002/test')
+            }
+          })
+          .finally(() => {
+            this.loading = false
+            this.deleteDialogVisible = false
+            this.deleteTargetId = null
+          })
+      }
     },
 
     handleCancelDelete() {
       this.deleteDialogVisible = false
       this.deleteTargetId = null
+      this.batchDeleteMode = false
     },
 
     fetchReportOptions() {
@@ -633,9 +732,10 @@ export default {
     // 邮箱组管理方法
     fetchGroups() {
       this.loading = true
-      apiClient.get('/email-groups')
+      apiClient.get(`/email-groups?page=${this.groupCurrentPage}&pageSize=${this.groupPageSize}&q=${this.groupSearchText}`)
         .then(response => {
-          this.groupList = response.data
+          this.groupList = response.data.items || response.data
+          this.groupTotal = response.data.total || this.groupList.length
           // 更新分组选项
           this.groupOptions = this.groupList.map(item => ({
             value: item.id,
@@ -651,10 +751,12 @@ export default {
     },
 
     searchGroups() {
+      this.groupCurrentPage = 1 // 重置为第一页
       this.loading = true
-      apiClient.get(`/email-groups/search?q=${this.groupSearchText}`)
+      apiClient.get(`/email-groups/search?q=${this.groupSearchText}&page=${this.groupCurrentPage}&pageSize=${this.groupPageSize}`)
         .then(response => {
-          this.groupList = response.data
+          this.groupList = response.data.items || response.data
+          this.groupTotal = response.data.total || this.groupList.length
           this.loading = false
         })
         .catch(error => {
@@ -662,6 +764,32 @@ export default {
           this.$message.error('搜索邮箱组失败')
           this.loading = false
         })
+    },
+
+    // 邮箱组分页方法
+    handleGroupSizeChange(size) {
+      this.groupPageSize = size
+      this.fetchGroups()
+    },
+
+    handleGroupCurrentChange(page) {
+      this.groupCurrentPage = page
+      this.fetchGroups()
+    },
+
+    // 邮箱组选择变化
+    handleGroupSelectionChange(val) {
+      this.selectedGroups = val
+    },
+
+    // 批量删除邮箱组
+    handleBatchDeleteGroup() {
+      if (this.selectedGroups.length === 0) {
+        this.$message.warning('请至少选择一个邮箱组')
+        return
+      }
+      this.groupDeleteConfirmVisible = true
+      this.batchDeleteMode = true
     },
 
     showGroupModal() {
@@ -798,39 +926,67 @@ export default {
     cancelGroupDelete() {
       this.groupDeleteConfirmVisible = false
       this.currentGroupId = null
+      this.batchDeleteMode = false
     },
 
     confirmGroupDelete() {
-      this.loading = true
-      apiClient
-        .delete(`/email-groups/${String(this.currentGroupId)}`)
-        .then((response) => {
-          this.$message.success('邮箱组删除成功')
-          this.memberModalVisible = false
-          this.fetchGroups()
-        })
-        .catch((error) => {
-          console.error('删除邮箱组失败:', error)
-          // 改进错误处理，更详细地输出错误信息
-          let errorMsg = '删除邮箱组失败'
-          if (error.response && error.response.data && error.response.data.error) {
-            errorMsg = error.response.data.error
-          } else if (error.message) {
-            errorMsg = `删除邮箱组失败: ${error.message}`
-          }
-          this.$message.error(errorMsg)
+      if (this.batchDeleteMode) {
+        // 批量删除邮箱组
+        const groupIds = this.selectedGroups.map(item => item.id)
+        this.loading = true
+        apiClient
+          .post('/email-groups/batch-delete', { ids: groupIds })
+          .then((response) => {
+            this.$message.success('批量删除邮箱组成功')
+            this.fetchGroups()
+          })
+          .catch((error) => {
+            console.error('批量删除邮箱组失败:', error)
+            let errorMsg = '批量删除邮箱组失败'
+            if (error.response && error.response.data && error.response.data.error) {
+              errorMsg = error.response.data.error
+            } else if (error.message) {
+              errorMsg = `批量删除邮箱组失败: ${error.message}`
+            }
+            this.$message.error(errorMsg)
+          })
+          .finally(() => {
+            this.loading = false
+            this.groupDeleteConfirmVisible = false
+            this.batchDeleteMode = false
+          })
+      } else {
+        this.loading = true
+        apiClient
+          .delete(`/email-groups/${String(this.currentGroupId)}`)
+          .then((response) => {
+            this.$message.success('邮箱组删除成功')
+            this.memberModalVisible = false
+            this.fetchGroups()
+          })
+          .catch((error) => {
+            console.error('删除邮箱组失败:', error)
+            // 改进错误处理，更详细地输出错误信息
+            let errorMsg = '删除邮箱组失败'
+            if (error.response && error.response.data && error.response.data.error) {
+              errorMsg = error.response.data.error
+            } else if (error.message) {
+              errorMsg = `删除邮箱组失败: ${error.message}`
+            }
+            this.$message.error(errorMsg)
 
-          // 检查是否是网络错误
-          if (error.message && error.message.includes('Network Error')) {
-            this.$message.error('网络错误: 请确保后端服务器已启动并且可以访问')
-            console.error('建议: 请检查后端服务器是否已启动，并尝试访问 http://localhost:5002/test')
-          }
-        })
-        .finally(() => {
-          this.loading = false
-          this.groupDeleteConfirmVisible = false
-          this.currentGroupId = null
-        })
+            // 检查是否是网络错误
+            if (error.message && error.message.includes('Network Error')) {
+              this.$message.error('网络错误: 请确保后端服务器已启动并且可以访问')
+              console.error('建议: 请检查后端服务器是否已启动，并尝试访问 http://localhost:5002/test')
+            }
+          })
+          .finally(() => {
+            this.loading = false
+            this.groupDeleteConfirmVisible = false
+            this.currentGroupId = null
+          })
+      }
     }
   }
 }
