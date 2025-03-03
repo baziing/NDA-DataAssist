@@ -11,6 +11,26 @@ logging.basicConfig(
 )
 logger = logging.getLogger('email_management')
 
+def email_exists(cursor, email, exclude_id=None):
+    """检查邮箱是否已存在（可选排除特定 ID）"""
+    query = "SELECT id FROM autoreport_emails WHERE email = %s"
+    params = (email,)
+    if exclude_id:
+        query += " AND id != %s"
+        params += (str(exclude_id),)
+    cursor.execute(query, params)
+    return cursor.fetchone() is not None
+
+def group_name_exists(cursor, group_name, exclude_id=None):
+    """检查邮箱组名是否已存在（可选排除特定 ID）"""
+    query = "SELECT id FROM autoreport_email_groups WHERE group_name = %s"
+    params = (group_name,)
+    if exclude_id:
+        query += " AND id != %s"
+        params += (str(exclude_id),)
+    cursor.execute(query, params)
+    return cursor.fetchone() is not None
+
 def get_all_emails():
     """
     获取所有邮箱地址
@@ -153,11 +173,7 @@ def add_email(email_data):
         conn.start_transaction()
 
         # 检查邮箱是否已存在
-        check_email_query = "SELECT id FROM autoreport_emails WHERE email = %s"
-        cursor.execute(check_email_query, (email_data['email'],))
-        existing_email = cursor.fetchone()
-
-        if existing_email:
+        if email_exists(cursor, email_data['email']):
             conn.rollback()
             logger.warning(f"邮箱 {email_data['email']} 已存在")
             return {'status': 'error', 'message': '邮箱已存在'}
@@ -228,6 +244,12 @@ def update_email(email_data):
         
         # 开始事务
         conn.start_transaction()
+
+        # 检查更新后的邮箱是否与其他邮箱冲突
+        if email_exists(cursor, email_data['email'], email_data['id']):
+            conn.rollback()
+            logger.warning(f"邮箱 {email_data['email']} 已存在，更新失败")
+            return {'status': 'error', 'message': '邮箱已存在，更新失败'}
         
         # 更新邮箱地址
         email_query = """
@@ -467,11 +489,7 @@ def add_group(group_data):
         conn.start_transaction()
 
         # 检查邮箱组是否已存在
-        check_group_query = "SELECT id FROM autoreport_email_groups WHERE group_name = %s"
-        cursor.execute(check_group_query, (group_data['name'],))
-        existing_group = cursor.fetchone()
-
-        if existing_group:
+        if group_name_exists(cursor, group_data['name']):
             conn.rollback()
             logger.warning(f"邮箱组 {group_data['name']} 已存在")
             return {'status': 'error', 'message': '邮箱组已存在'}
@@ -603,6 +621,12 @@ def update_group(group_data):
         
         # 开始事务
         conn.start_transaction()
+
+        # 检查更新后的邮箱组名是否与其他邮箱组冲突
+        if group_name_exists(cursor, group_data['name'], group_data['id']):
+            conn.rollback()
+            logger.warning(f"邮箱组 {group_data['name']} 已存在，更新失败")
+            return {'status': 'error', 'message': '邮箱组已存在，更新失败'}
         
         # 1. 更新邮箱组
         group_id = str(group_data['id'])  # 将 group_id 转换为字符串
