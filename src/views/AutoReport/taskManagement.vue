@@ -98,12 +98,32 @@
           :formatter="formatDateTime"
           sortable
         />
-        <el-table-column label="操作" width="350">
+        <el-table-column label="操作" width="250">
           <template slot-scope="scope">
-            <el-button size="mini" @click="handleDownloadReport(scope.row)">下载报表</el-button>
-            <el-button size="mini" @click="handleViewSql(scope.row)">查看 SQL</el-button>
-            <el-button size="mini" @click="handleEdit(scope.row)">编辑</el-button>
-            <el-button size="mini" type="danger" @click="handleDelete(scope.row)">删除</el-button>
+            <el-button
+              type="text"
+              size="small"
+              @click="handleDownloadReport(scope.row)"
+            >下载报表</el-button>
+            <el-divider direction="vertical" />
+            <el-button
+              type="text"
+              size="small"
+              @click="handleViewSql(scope.row)"
+            >查看 SQL</el-button>
+            <el-divider direction="vertical" />
+            <el-button
+              type="text"
+              size="small"
+              @click="handleEdit(scope.row)"
+            >编辑</el-button>
+            <el-divider direction="vertical" />
+            <el-button
+              type="text"
+              size="small"
+              class="delete-btn"
+              @click="handleDelete(scope.row)"
+            >删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -1009,5 +1029,10 @@ export default {
 /* 调整执行时间选择器的宽度 */
 .execution-time-picker {
   width: 197px; /* 调整为与执行周期选择框相同的宽度 */
+}
+
+/* 删除按钮样式 */
+.delete-btn {
+  color: #f56c6c;
 }
 </style>
