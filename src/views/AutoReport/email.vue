@@ -108,7 +108,7 @@
                   />
                 </el-select>
               </el-form-item>
-              <el-form-item label="接收报表" prop="reports">
+              <el-form-item label="接收报表">
                 <el-select
                   v-model="emailForm.reports"
                   multiple
@@ -380,9 +380,6 @@ export default {
         email: [
           { required: true, message: '请输入邮箱地址', trigger: 'blur' },
           { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }
-        ],
-        reports: [
-          { required: true, message: '请选择接收报表', trigger: 'change' }
         ]
       },
 
@@ -436,11 +433,18 @@ export default {
       this.loading = true
       apiClient.get('/emails')
         .then(response => {
+          console.log('获取到的邮箱数据:', response.data)
           this.emailList = response.data.map(email => ({
             ...email,
             id: String(email.id),
-            groups: email.groups ? email.groups.map(group => ({ ...group, value: String(group.value) })) : [],
-            reports: email.reports ? email.reports.map(report => ({ ...report, id: String(report.id) })) : []
+            groups: email.groups ? email.groups.map(group => ({
+              value: String(group.value),
+              label: group.label
+            })) : [],
+            reports: email.reports ? email.reports.map(report => ({
+              ...report,
+              id: String(report.id)
+            })) : []
           }))
           // 更新邮箱选项
           this.allEmailOptions = this.emailList.map(item => ({
@@ -460,11 +464,18 @@ export default {
       this.loading = true
       apiClient.get(`/emails/search?q=${this.emailSearchText}`)
         .then(response => {
+          console.log('搜索到的邮箱数据:', response.data)
           this.emailList = response.data.map(email => ({
             ...email,
             id: String(email.id),
-            groups: email.groups ? email.groups.map(group => ({ ...group, value: String(group.value) })) : [],
-            reports: email.reports ? email.reports.map(report => ({ ...report, id: String(report.id) })) : []
+            groups: email.groups ? email.groups.map(group => ({
+              value: String(group.value),
+              label: group.label
+            })) : [],
+            reports: email.reports ? email.reports.map(report => ({
+              ...report,
+              id: String(report.id)
+            })) : []
           }))
           this.loading = false
         })
@@ -488,12 +499,14 @@ export default {
 
     editEmail(row) {
       this.emailFormMode = 'edit'
+      console.log('编辑邮箱，原始数据:', row)
       this.emailForm = {
         id: String(row.id), // 将 row.id 转换为字符串
         email: row.email,
         groups: row.groups ? row.groups.map(g => g.value) : [],
         reports: row.reports ? row.reports.map(r => String(r.id)) : [] // 将 report ID 转换为字符串
       }
+      console.log('处理后的表单数据:', this.emailForm)
       this.emailModalVisible = true
     },
 
@@ -503,9 +516,11 @@ export default {
           // 在提交前，确保 reports 数组中的 ID 都是字符串
           const emailData = {
             ...this.emailForm,
+            groups: this.emailForm.groups ? this.emailForm.groups.map(id => String(id)) : [],
             reports: this.emailForm.reports ? this.emailForm.reports.map(id => String(id)) : []
           }
 
+          console.log('提交的邮箱数据:', emailData)
           this.loading = true
           if (this.emailFormMode === 'add') {
             apiClient.post('/emails', emailData)
@@ -624,7 +639,7 @@ export default {
           // 更新分组选项
           this.groupOptions = this.groupList.map(item => ({
             value: item.id,
-            label: item.name
+            label: item.group_name || item.name
           }))
           this.loading = false
         })
