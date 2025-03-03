@@ -323,34 +323,34 @@ def delete_email(email_id):
         
         # 开始事务
         conn.start_transaction()
-        
+
         # 删除邮箱前，先删除相关的组成员关系和报表接收者关系
         # 注意：如果表中设置了外键约束和CASCADE删除，这些步骤可能不是必需的
-        
+
         # 1. 删除邮箱组成员关系
         delete_group_member_query = """
         DELETE FROM autoreport_email_group_members 
         WHERE email_id = %s
         """
-        cursor.execute(delete_group_member_query, (email_id,))
+        cursor.execute(delete_group_member_query, (str(email_id),))  # 确保 email_id 是字符串
         logger.debug(f"删除邮箱组成员关系成功，邮箱ID: {email_id}")
-        
+
         # 2. 删除报表接收者关系
         delete_recipient_query = """
         DELETE FROM autoreport_task_recipients 
         WHERE email_id = %s
         """
-        cursor.execute(delete_recipient_query, (str(email_id),))  # 将 email_id 转换为字符串
+        cursor.execute(delete_recipient_query, (str(email_id),))  # 确保 email_id 是字符串
         logger.debug(f"删除报表接收者关系成功，邮箱ID: {email_id}")
-        
+
         # 3. 删除邮箱
         delete_email_query = """
         DELETE FROM autoreport_emails 
         WHERE id = %s
         """
-        cursor.execute(delete_email_query, (str(email_id),))  # 将 email_id 转换为字符串
+        cursor.execute(delete_email_query, (str(email_id),))  # 确保 email_id 是字符串
         logger.debug(f"删除邮箱成功，ID: {email_id}")
-        
+
         # 提交事务
         conn.commit()
         logger.info(f"邮箱删除成功，ID: {email_id}")

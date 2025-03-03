@@ -61,20 +61,34 @@
                   @click="editEmail(scope.row)"
                 >编辑</el-button>
                 <el-divider direction="vertical" />
-                <el-popconfirm
-                  title="确定要删除此邮箱吗?"
-                  @confirm="deleteEmail(scope.row.id)"
+                <el-button
+                  type="text"
+                  size="small"
+                  class="delete-btn"
+                  @click="deleteEmail(scope.row.id)"
                 >
-                  <el-button
-                    slot="reference"
-                    type="text"
-                    size="small"
-                    class="delete-btn"
-                  >删除</el-button>
-                </el-popconfirm>
+                  删除
+                </el-button>
               </template>
             </el-table-column>
           </el-table>
+
+          <!-- 删除确认对话框 -->
+          <el-dialog
+            title="提示"
+            :visible.sync="deleteConfirmVisible"
+            width="30%"
+            :before-close="cancelDelete"
+          >
+            <div style="display: flex; align-items: center;">
+              <i class="el-icon-warning" style="color: #E6A23C; font-size: 24px; margin-right: 10px;" />
+              <span>此操作将永久删除该邮箱，是否继续？</span>
+            </div>
+            <span slot="footer" class="dialog-footer">
+              <el-button @click="cancelDelete">取 消</el-button>
+              <el-button type="primary" :loading="loading" @click="confirmDelete">确 定</el-button>
+            </span>
+          </el-dialog>
 
           <!-- 邮箱表单弹窗 -->
           <el-dialog
@@ -144,7 +158,6 @@
           </div>
 
           <el-table
-            v-loading="loading"
             :data="groupList"
             border
             style="width: 100%"
@@ -190,17 +203,12 @@
                   @click="manageGroupMembers(scope.row)"
                 >管理成员</el-button>
                 <el-divider direction="vertical" />
-                <el-popconfirm
-                  title="确定要删除此邮箱组吗?"
-                  @confirm="deleteGroup(scope.row.id)"
-                >
-                  <el-button
-                    slot="reference"
-                    type="text"
-                    size="small"
-                    class="delete-btn"
-                  >删除</el-button>
-                </el-popconfirm>
+                <el-button
+                  type="text"
+                  size="small"
+                  class="delete-btn"
+                  @click="deleteGroup(scope.row.id)"
+                >删除</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -282,6 +290,23 @@
             </div>
             <span slot="footer" class="dialog-footer">
               <el-button type="primary" @click="allMembersVisible = false">关闭</el-button>
+            </span>
+          </el-dialog>
+
+          <!-- 邮箱组删除确认对话框 -->
+          <el-dialog
+            title="提示"
+            :visible.sync="groupDeleteConfirmVisible"
+            width="30%"
+            :before-close="cancelGroupDelete"
+          >
+            <div style="display: flex; align-items: center;">
+              <i class="el-icon-warning" style="color: #E6A23C; font-size: 24px; margin-right: 10px;" />
+              <span>此操作将永久删除该邮箱组，是否继续？</span>
+            </div>
+            <span slot="footer" class="dialog-footer">
+              <el-button @click="cancelGroupDelete">取 消</el-button>
+              <el-button type="primary" :loading="loading" @click="confirmGroupDelete">确 定</el-button>
             </span>
           </el-dialog>
         </el-tab-pane>
@@ -373,6 +398,10 @@ export default {
         ]
       },
 
+      // 删除确认
+      deleteConfirmVisible: false,
+      deleteTargetId: null,
+
       // 邮箱组管理
       groupList: [],
       groupSearchText: '',
@@ -402,7 +431,10 @@ export default {
       // 选项数据
       groupOptions: [],
       reportOptions: [],
-      allEmailOptions: []
+      allEmailOptions: [],
+
+      // 邮箱组删除确认
+      groupDeleteConfirmVisible: false
     }
   },
   created() {
@@ -543,19 +575,50 @@ export default {
     },
 
     deleteEmail(id) {
+      // 不直接删除，而是显示确认对话框
+      this.deleteTargetId = id
+      this.deleteConfirmVisible = true
+    },
+
+    confirmDelete() {
+      // 用户确认删除后执行实际的删除操作
+      if (!this.deleteTargetId) return
+
       this.loading = true
-      apiClient.delete(`/emails/${String(id)}`) // 将 id 转换为字符串
-        .then(response => {
+      apiClient
+        .delete(`/emails/${String(this.deleteTargetId)}`)
+        .then((response) => {
           this.$message.success('邮箱删除成功')
           this.fetchEmails()
         })
-        .catch(error => {
+        .catch((error) => {
           console.error('删除邮箱失败:', error)
-          this.$message.error(error.response?.data?.error || '删除邮箱失败')
+          // 改进错误处理，更详细地输出错误信息
+          let errorMsg = '删除邮箱失败'
+          if (error.response && error.response.data && error.response.data.error) {
+            errorMsg = error.response.data.error
+          } else if (error.message) {
+            errorMsg = `删除邮箱失败: ${error.message}`
+          }
+          this.$message.error(errorMsg)
+
+          // 检查是否是网络错误
+          if (error.message && error.message.includes('Network Error')) {
+            this.$message.error('网络错误: 请确保后端服务器已启动并且可以访问')
+            console.error('建议: 请检查后端服务器是否已启动，并尝试访问 http://localhost:5002/test')
+          }
         })
         .finally(() => {
           this.loading = false
+          this.deleteConfirmVisible = false
+          this.deleteTargetId = null
         })
+    },
+
+    cancelDelete() {
+      // 用户取消删除
+      this.deleteConfirmVisible = false
+      this.deleteTargetId = null
     },
 
     fetchReportOptions() {
@@ -673,19 +736,9 @@ export default {
     },
 
     deleteGroup(id) {
-      this.loading = true
-      apiClient.delete(`/email-groups/${id}`)
-        .then(response => {
-          this.$message.success('邮箱组删除成功')
-          this.fetchGroups()
-        })
-        .catch(error => {
-          console.error('删除邮箱组失败:', error)
-          this.$message.error(error.response?.data?.error || '删除邮箱组失败')
-        })
-        .finally(() => {
-          this.loading = false
-        })
+      // 显示确认对话框
+      this.currentGroupId = id
+      this.groupDeleteConfirmVisible = true
     },
 
     // 邮箱组成员管理
@@ -741,6 +794,45 @@ export default {
     viewAllMembers(group) {
       this.currentGroupMembers = group.memberEmails
       this.allMembersVisible = true
+    },
+
+    // 邮箱组删除确认
+    cancelGroupDelete() {
+      this.groupDeleteConfirmVisible = false
+      this.currentGroupId = null
+    },
+
+    confirmGroupDelete() {
+      this.loading = true
+      apiClient
+        .delete(`/email-groups/${String(this.currentGroupId)}`)
+        .then((response) => {
+          this.$message.success('邮箱组删除成功')
+          this.memberModalVisible = false
+          this.fetchGroups()
+        })
+        .catch((error) => {
+          console.error('删除邮箱组失败:', error)
+          // 改进错误处理，更详细地输出错误信息
+          let errorMsg = '删除邮箱组失败'
+          if (error.response && error.response.data && error.response.data.error) {
+            errorMsg = error.response.data.error
+          } else if (error.message) {
+            errorMsg = `删除邮箱组失败: ${error.message}`
+          }
+          this.$message.error(errorMsg)
+
+          // 检查是否是网络错误
+          if (error.message && error.message.includes('Network Error')) {
+            this.$message.error('网络错误: 请确保后端服务器已启动并且可以访问')
+            console.error('建议: 请检查后端服务器是否已启动，并尝试访问 http://localhost:5002/test')
+          }
+        })
+        .finally(() => {
+          this.loading = false
+          this.groupDeleteConfirmVisible = false
+          this.currentGroupId = null
+        })
     }
   }
 }
