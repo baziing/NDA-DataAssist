@@ -173,7 +173,7 @@
             <el-table-column type="selection" width="55" />
             <el-table-column prop="group_name" label="组名称" min-width="150" />
             <el-table-column prop="memberCount" label="成员数量" width="100" />
-            <el-table-column prop="memberEmails" label="成员邮箱" min-width="500">
+            <el-table-column prop="memberEmails" label="成员邮箱" min-width="400">
               <template slot-scope="scope">
                 <div v-if="scope.row.memberEmails && scope.row.memberEmails.length > 0" class="member-emails-container">
                   <div class="member-emails-wrapper">

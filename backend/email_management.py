@@ -65,12 +65,22 @@ def get_all_emails(page=1, page_size=10, search_text=None):
         
         # 计算分页
         offset = (page - 1) * page_size
-        
-        # 查询邮箱列表
+
+        # 使用 JOIN 一次性获取邮箱、分组和报表信息
         query = f"""
-        SELECT id, email FROM autoreport_emails
+        SELECT 
+            e.id, 
+            e.email,
+            GROUP_CONCAT(DISTINCT g.id, ':', g.group_name SEPARATOR ';') as groups,
+            GROUP_CONCAT(DISTINCT t.id, ':', t.taskName SEPARATOR ';') as reports
+        FROM autoreport_emails e
+        LEFT JOIN autoreport_email_group_members egm ON e.id = egm.email_id
+        LEFT JOIN autoreport_email_groups g ON egm.group_id = g.id
+        LEFT JOIN autoreport_task_recipients tr ON e.id = tr.email_id
+        LEFT JOIN autoreport_tasks t ON tr.task_id = t.id
         {where_clause}
-        ORDER BY email
+        GROUP BY e.id, e.email
+        ORDER BY e.email
         LIMIT %s OFFSET %s
         """
         query_params = params + [page_size, offset]
@@ -78,38 +88,17 @@ def get_all_emails(page=1, page_size=10, search_text=None):
         cursor.execute(query, query_params)
         emails = cursor.fetchall()
         logger.debug(f"获取到 {len(emails)} 个邮箱")
-        
-        # 为每个邮箱获取所属组信息
+
+        # 处理分组和报表信息
         for email in emails:
-            email['id'] = str(email['id'])  # 将 email_id 转换为字符串
-            # 查询邮箱所属的组
-            group_query = """
-            SELECT g.id as value, g.group_name as label
-            FROM autoreport_email_groups g
-            JOIN autoreport_email_group_members m ON g.id = m.group_id
-            WHERE m.email_id = %s
-            """
-            cursor.execute(group_query, (email['id'],))
-            email['groups'] = cursor.fetchall()
-            for group in email['groups']:
-                group['value'] = str(group['value'])  # 将 group_id 转换为字符串
-            
-            # 查询邮箱接收的报表
-            report_query = """
-            SELECT t.id, t.taskName as name
-            FROM autoreport_tasks t
-            JOIN autoreport_task_recipients r ON t.id = r.task_id
-            WHERE r.email_id = %s
-            """
-            cursor.execute(report_query, (email['id'],))
-            email['reports'] = cursor.fetchall()
-            for report in email['reports']:
-                report['id'] = str(report['id'])  # 将 report_id 转换为字符串
+            email['id'] = str(email['id'])
+            email['groups'] = [{'value': str(g.split(':')[0]), 'label': g.split(':')[1]} for g in email['groups'].split(';') if g] if email['groups'] else []
+            email['reports'] = [{'id': str(r.split(':')[0]), 'name': r.split(':')[1]} for r in email['reports'].split(';') if r] if email['reports'] else []
 
         logger.info("成功获取邮箱列表及其关联信息")
         return {
             'status': 'success',
-            'items': emails if emails is not None else [],  # 确保 items 始终是一个数组
+            'items': emails,
             'total': total,
             'page': page,
             'pageSize': page_size
@@ -155,48 +144,37 @@ def search_emails(search_text, page=1, page_size=10):
         
         # 计算分页
         offset = (page - 1) * page_size
-        
-        # 搜索邮箱
-        query = """
-        SELECT id, email FROM autoreport_emails
-        WHERE email LIKE %s
-        ORDER BY email
+
+        # 使用 JOIN 一次性获取邮箱、分组和报表信息
+        query = f"""
+        SELECT 
+            e.id, 
+            e.email,
+            GROUP_CONCAT(DISTINCT g.id, ':', g.group_name SEPARATOR ';') as groups,
+            GROUP_CONCAT(DISTINCT t.id, ':', t.taskName SEPARATOR ';') as reports
+        FROM autoreport_emails e
+        LEFT JOIN autoreport_email_group_members egm ON e.id = egm.email_id
+        LEFT JOIN autoreport_email_groups g ON egm.group_id = g.id
+        LEFT JOIN autoreport_task_recipients tr ON e.id = tr.email_id
+        LEFT JOIN autoreport_tasks t ON tr.task_id = t.id
+        WHERE e.email LIKE %s
+        GROUP BY e.id, e.email
+        ORDER BY e.email
         LIMIT %s OFFSET %s
         """
         cursor.execute(query, (f'%{search_text}%', page_size, offset))
         emails = cursor.fetchall()
         logger.debug(f"获取到 {len(emails)} 个邮箱")
-        
-        # 为每个邮箱获取所属组信息
-        for email in emails:
-            email['id'] = str(email['id'])  # 将 email_id 转换为字符串
-            # 查询邮箱所属的组
-            group_query = """
-            SELECT g.id as value, g.group_name as label
-            FROM autoreport_email_groups g
-            JOIN autoreport_email_group_members m ON g.id = m.group_id
-            WHERE m.email_id = %s
-            """
-            cursor.execute(group_query, (email['id'],))
-            email['groups'] = cursor.fetchall()
-            for group in email['groups']:
-                group['value'] = str(group['value'])  # 将 group_id 转换为字符串
 
-            # 查询邮箱接收的报表
-            report_query = """
-            SELECT t.id, t.taskName as name
-            FROM autoreport_tasks t
-            JOIN autoreport_task_recipients r ON t.id = r.task_id
-            WHERE r.email_id = %s
-            """
-            cursor.execute(report_query, (email['id'],))
-            email['reports'] = cursor.fetchall()
-            for report in email['reports']:
-                report['id'] = str(report['id'])  # 将 report_id 转换为字符串
-        
+        # 处理分组和报表信息
+        for email in emails:
+            email['id'] = str(email['id'])
+            email['groups'] = [{'value': str(g.split(':')[0]), 'label': g.split(':')[1]} for g in email['groups'].split(';') if g] if email['groups'] else []
+            email['reports'] = [{'id': str(r.split(':')[0]), 'name': r.split(':')[1]} for r in email['reports'].split(';') if r] if email['reports'] else []
+
         logger.info(f"成功搜索邮箱，找到 {total} 个匹配结果")
         return {
-            'status': 'success', 
+            'status': 'success',
             'items': emails,
             'total': total,
             'page': page,
