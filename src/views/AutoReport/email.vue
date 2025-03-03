@@ -74,21 +74,13 @@
           </el-table>
 
           <!-- 删除确认对话框 -->
-          <el-dialog
-            title="提示"
-            :visible.sync="deleteConfirmVisible"
-            width="30%"
-            :before-close="cancelDelete"
-          >
-            <div style="display: flex; align-items: center;">
-              <i class="el-icon-warning" style="color: #E6A23C; font-size: 24px; margin-right: 10px;" />
-              <span>此操作将永久删除该邮箱，是否继续？</span>
-            </div>
-            <span slot="footer" class="dialog-footer">
-              <el-button @click="cancelDelete">取 消</el-button>
-              <el-button type="primary" :loading="loading" @click="confirmDelete">确 定</el-button>
-            </span>
-          </el-dialog>
+          <delete-confirmation-dialog
+            :visible="deleteDialogVisible"
+            :message="'此操作将永久删除该邮箱, 是否继续?'"
+            :loading="loading"
+            @confirm="handleConfirmDelete"
+            @cancel="handleCancelDelete"
+          />
 
           <!-- 邮箱表单弹窗 -->
           <el-dialog
@@ -294,21 +286,13 @@
           </el-dialog>
 
           <!-- 邮箱组删除确认对话框 -->
-          <el-dialog
-            title="提示"
-            :visible.sync="groupDeleteConfirmVisible"
-            width="30%"
-            :before-close="cancelGroupDelete"
-          >
-            <div style="display: flex; align-items: center;">
-              <i class="el-icon-warning" style="color: #E6A23C; font-size: 24px; margin-right: 10px;" />
-              <span>此操作将永久删除该邮箱组，是否继续？</span>
-            </div>
-            <span slot="footer" class="dialog-footer">
-              <el-button @click="cancelGroupDelete">取 消</el-button>
-              <el-button type="primary" :loading="loading" @click="confirmGroupDelete">确 定</el-button>
-            </span>
-          </el-dialog>
+          <delete-confirmation-dialog
+            :visible="groupDeleteConfirmVisible"
+            :message="'此操作将永久删除该邮箱组, 是否继续?'"
+            :loading="loading"
+            @confirm="confirmGroupDelete"
+            @cancel="cancelGroupDelete"
+          />
         </el-tab-pane>
       </el-tabs>
     </el-card>
@@ -318,6 +302,7 @@
 <script>
 import axios from 'axios'
 import { getToken } from '@/utils/auth'
+import DeleteConfirmationDialog from '@/components/DeleteConfirmationDialog.vue'
 
 // 创建一个axios实例，设置基础URL和请求头
 const apiClient = axios.create({
@@ -372,6 +357,9 @@ apiClient.interceptors.response.use(
 
 export default {
   name: 'EmailManagement',
+  components: {
+    DeleteConfirmationDialog
+  },
   data() {
     return {
       activeTab: 'email',
@@ -399,8 +387,8 @@ export default {
       },
 
       // 删除确认
-      deleteConfirmVisible: false,
       deleteTargetId: null,
+      deleteDialogVisible: false,
 
       // 邮箱组管理
       groupList: [],
@@ -575,13 +563,11 @@ export default {
     },
 
     deleteEmail(id) {
-      // 不直接删除，而是显示确认对话框
       this.deleteTargetId = id
-      this.deleteConfirmVisible = true
+      this.deleteDialogVisible = true
     },
 
-    confirmDelete() {
-      // 用户确认删除后执行实际的删除操作
+    handleConfirmDelete() {
       if (!this.deleteTargetId) return
 
       this.loading = true
@@ -593,7 +579,6 @@ export default {
         })
         .catch((error) => {
           console.error('删除邮箱失败:', error)
-          // 改进错误处理，更详细地输出错误信息
           let errorMsg = '删除邮箱失败'
           if (error.response && error.response.data && error.response.data.error) {
             errorMsg = error.response.data.error
@@ -602,7 +587,6 @@ export default {
           }
           this.$message.error(errorMsg)
 
-          // 检查是否是网络错误
           if (error.message && error.message.includes('Network Error')) {
             this.$message.error('网络错误: 请确保后端服务器已启动并且可以访问')
             console.error('建议: 请检查后端服务器是否已启动，并尝试访问 http://localhost:5002/test')
@@ -610,14 +594,13 @@ export default {
         })
         .finally(() => {
           this.loading = false
-          this.deleteConfirmVisible = false
+          this.deleteDialogVisible = false
           this.deleteTargetId = null
         })
     },
 
-    cancelDelete() {
-      // 用户取消删除
-      this.deleteConfirmVisible = false
+    handleCancelDelete() {
+      this.deleteDialogVisible = false
       this.deleteTargetId = null
     },
 
