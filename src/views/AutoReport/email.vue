@@ -479,11 +479,11 @@ export default {
           console.log('response.data.items 的类型:', Array.isArray(response.data.items) ? 'Array' : typeof response.data.items)
 
           this.emailList = response.data.items.map(email => {
-            console.log('当前 email:', email)
-            console.log('email.groups:', email.groups)
-            console.log('email.groups 的类型:', Array.isArray(email.groups) ? 'Array' : typeof email.groups)
-            console.log('email.reports:', email.reports)
-            console.log('email.reports 的类型:', Array.isArray(email.reports) ? 'Array' : typeof email.reports)
+            // console.log('当前 email:', email)
+            // console.log('email.groups:', email.groups)
+            // console.log('email.groups 的类型:', Array.isArray(email.groups) ? 'Array' : typeof email.groups)
+            // console.log('email.reports:', email.reports)
+            // console.log('email.reports 的类型:', Array.isArray(email.reports) ? 'Array' : typeof email.reports)
 
             return {
               ...email,

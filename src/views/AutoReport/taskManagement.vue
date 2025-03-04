@@ -647,10 +647,8 @@ export default {
     formatDateTime(row, column) {
       const date = row[column.property]
       if (date) {
-        console.log('原始时间:', date)
         // 将时间转换为西八区 (-8 时区)
         const formattedDate = moment(date).utcOffset(0).format('YYYY-MM-DD HH:mm')
-        console.log('格式化后的时间:', formattedDate)
         return formattedDate
       } else {
         return ''
@@ -660,10 +658,6 @@ export default {
     // 查看SQL
     handleViewSql(row) {
       this.dialogVisible = true
-
-      console.log('原始行数据:', row)
-      console.log('原始ID:', row.id)
-      console.log('ID类型:', typeof row.id)
 
       if (row.originalId) {
         console.log('原始ID字符串:', row.originalId)
@@ -711,10 +705,16 @@ export default {
 
     // 编辑任务
     handleEdit(row) {
+      // 清空之前的收件人信息，避免显示上一次的数据
+      if (this.editForm) {
+        this.editForm.recipients = []
+      }
+
       this.currentTask = row // 保存当前编辑的任务
       this.editForm = {
         ...row,
-        isEnabled: row.is_enabled === 1 || row.is_enabled === true
+        isEnabled: row.is_enabled === 1 || row.is_enabled === true,
+        recipients: [] // 初始化为空数组，等待异步加载
       }
       this.originalTaskName = row.taskName
       this.editDialogVisible = true
@@ -727,9 +727,13 @@ export default {
     // 获取任务的收件人信息
     fetchTaskRecipients(taskId) {
       console.log(`正在获取任务 ${taskId} 的收件人信息`)
+
       fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/task_management/task_recipients/${taskId}`)
         .then(response => {
-          return response.json() // 即使状态码是错误的，也尝试解析响应
+          if (!response.ok) {
+            throw new Error(`获取收件人失败: ${response.status}`)
+          }
+          return response.json()
         })
         .then(data => {
           console.log('任务收件人:', data)
@@ -890,6 +894,7 @@ export default {
           this.updating = false
           this.editDialogVisible = false
           this.fetchTasks() // 刷新任务列表
+          this.currentTask = null // 重置当前任务，确保下次编辑时重新获取收件人信息
         })
         .catch(error => {
           this.$message.error('任务更新失败: ' + error.message)
