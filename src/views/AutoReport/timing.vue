@@ -97,16 +97,21 @@
           filterable
           placeholder="请选择收件人"
           style="width: 100%;"
+          @tag-close="handleTagClose"
         >
+          <template slot="prefix">
+            <i class="el-icon-message" style="color: #909399;" />
+          </template>
           <el-option-group label="邮件组">
             <el-option
               v-for="group in emailGroups"
               :key="'group-' + group.id"
               :label="group.group_name"
               :value="'group-' + group.id"
+              class="email-group-option"
             >
               <span style="float: left">{{ group.group_name }}</span>
-              <span style="float: right; color: #8492a6; font-size: 13px">邮件组</span>
+              <span style="float: right; color: #409EFF; font-size: 13px">邮件组</span>
             </el-option>
           </el-option-group>
           <el-option-group label="邮件地址">
@@ -115,9 +120,10 @@
               :key="'email-' + email.id"
               :label="email.name ? email.name + ' <' + email.email + '>' : email.email"
               :value="'email-' + email.id"
+              class="email-address-option"
             >
               <span style="float: left">{{ email.email }}</span>
-              <span style="float: right; color: #8492a6; font-size: 13px">个人</span>
+              <span style="float: right; color: #67C23A; font-size: 13px">个人</span>
             </el-option>
           </el-option-group>
         </el-select>
@@ -173,6 +179,17 @@ export default {
       emailGroups: [] // 存储邮件组列表
     }
   },
+  watch: {
+    // 监听收件人变化，应用样式
+    'task.recipients': {
+      handler() {
+        this.$nextTick(() => {
+          this.applyTagStyles()
+        })
+      },
+      deep: true
+    }
+  },
   created() {
     // 获取任务列表
     fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/get_tasks`)
@@ -196,6 +213,22 @@ export default {
 
     // 获取邮件组列表
     this.fetchEmailGroups()
+
+    // 添加事件监听器，在组件挂载后应用样式
+    this.$nextTick(() => {
+      this.applyTagStyles()
+    })
+  },
+  mounted() {
+    // 组件挂载后应用样式
+    this.applyTagStyles()
+
+    // 添加全局点击事件监听器，确保在选择器展开/收起时应用样式
+    document.addEventListener('click', this.handleGlobalClick)
+  },
+  beforeDestroy() {
+    // 组件销毁前移除事件监听器
+    document.removeEventListener('click', this.handleGlobalClick)
   },
   methods: {
     // 获取邮件地址列表
@@ -211,6 +244,10 @@ export default {
         .then(data => {
           console.log('邮件地址列表:', data)
           this.emails = data.items || []
+          // 在数据加载后应用标签样式
+          this.$nextTick(() => {
+            this.applyTagStyles()
+          })
         })
         .catch(error => {
           console.error('获取邮件地址失败:', error)
@@ -231,6 +268,10 @@ export default {
         .then(data => {
           console.log('邮件组列表:', data)
           this.emailGroups = data
+          // 在数据加载后应用标签样式
+          this.$nextTick(() => {
+            this.applyTagStyles()
+          })
         })
         .catch(error => {
           console.error('获取邮件组失败:', error)
@@ -503,6 +544,48 @@ export default {
           this.taskProgress += `${this.getFormattedTimestamp()} - 任务名称校验失败: ${error.message}\n`
           this.taskProgress += `${this.getFormattedTimestamp()} - 任务终止。\n`
         })
+    },
+    handleTagClose(tag) {
+      console.log('Tag closed:', tag)
+      // 在下一个DOM更新周期应用样式
+      this.$nextTick(() => {
+        this.applyTagStyles()
+      })
+    },
+    applyTagStyles() {
+      // 获取所有标签
+      const tags = document.querySelectorAll('.el-select__tags .el-tag')
+
+      // 遍历标签并应用样式
+      tags.forEach(tag => {
+        const value = tag.textContent || ''
+
+        // 检查标签内容，根据内容判断类型
+        if (this.emailGroups.some(group => group.group_name === value.trim())) {
+          // 邮件组样式
+          tag.style.backgroundColor = '#f0f9eb'
+          tag.style.borderColor = '#e1f3d8'
+          tag.style.color = '#67c23a'
+          // 添加自定义类名
+          tag.classList.add('email-group-tag')
+          tag.classList.remove('email-address-tag')
+        } else {
+          // 个人邮件样式
+          tag.style.backgroundColor = '#ecf5ff'
+          tag.style.borderColor = '#d9ecff'
+          tag.style.color = '#409eff'
+          // 添加自定义类名
+          tag.classList.add('email-address-tag')
+          tag.classList.remove('email-group-tag')
+        }
+      })
+    },
+    // 处理全局点击事件
+    handleGlobalClick() {
+      // 延迟执行，确保DOM已更新
+      setTimeout(() => {
+        this.applyTagStyles()
+      }, 100)
     }
   }
 }
@@ -518,5 +601,24 @@ export default {
   color: #909399;
   line-height: 1.2;
   padding-top: 4px;
+}
+
+/* 自定义邮件标签样式 */
+::v-deep .el-tag {
+  margin-right: 4px;
+}
+
+/* 邮件组样式 - 使用属性选择器 */
+::v-deep .el-tag[data-path*="group-"] {
+  background-color: #ecf5ff !important;
+  border-color: #d9ecff !important;
+  color: #409eff !important;
+}
+
+/* 邮件地址样式 - 使用属性选择器 */
+::v-deep .el-tag[data-path*="email-"] {
+  background-color: #f0f9eb !important;
+  border-color: #e1f3d8 !important;
+  color: #67c23a !important;
 }
 </style>
