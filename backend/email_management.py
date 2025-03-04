@@ -49,9 +49,11 @@ def get_all_emails(page=1, page_size=10, search_text=None):
         
         # 构建查询条件
         where_clause = ""
+        email_filter = ""
         params = []
         if search_text:
             where_clause = "WHERE email LIKE %s"
+            email_filter = "AND email LIKE %s"
             params.append(f'%{search_text}%')
         
         # 查询总数
@@ -66,24 +68,75 @@ def get_all_emails(page=1, page_size=10, search_text=None):
         # 计算分页
         offset = (page - 1) * page_size
 
-        # 使用 JOIN 一次性获取邮箱、分组和报表信息
+        # 使用复杂查询获取邮箱直接关联的报表和通过邮箱组关联的报表
         query = f"""
+        WITH email_reports AS (
+            -- 邮箱直接关联的报表
+            SELECT 
+                e.id as email_id, 
+                e.email,
+                t.id as task_id, 
+                t.taskName as task_name
+            FROM autoreport_emails e
+            LEFT JOIN autoreport_task_recipients tr ON e.id = tr.email_id
+            LEFT JOIN autoreport_tasks t ON tr.task_id = t.id
+            WHERE tr.email_id IS NOT NULL AND t.id IS NOT NULL
+            {email_filter if search_text else ""}
+            
+            UNION
+            
+            -- 通过邮箱组关联的报表
+            SELECT 
+                e.id as email_id, 
+                e.email,
+                t.id as task_id, 
+                t.taskName as task_name
+            FROM autoreport_emails e
+            JOIN autoreport_email_group_members egm ON e.id = egm.email_id
+            JOIN autoreport_task_recipients tr ON egm.group_id = tr.group_id
+            JOIN autoreport_tasks t ON tr.task_id = t.id
+            WHERE tr.group_id IS NOT NULL AND t.id IS NOT NULL
+            {email_filter if search_text else ""}
+        ),
+        email_groups AS (
+            -- 邮箱所属的组
+            SELECT 
+                e.id as email_id, 
+                e.email,
+                g.id as group_id, 
+                g.group_name
+            FROM autoreport_emails e
+            LEFT JOIN autoreport_email_group_members egm ON e.id = egm.email_id
+            LEFT JOIN autoreport_email_groups g ON egm.group_id = g.id
+            WHERE egm.group_id IS NOT NULL
+            {email_filter if search_text else ""}
+        )
+        
         SELECT 
             e.id, 
             e.email,
-            GROUP_CONCAT(DISTINCT g.id, ':', g.group_name SEPARATOR ';') as groups,
-            GROUP_CONCAT(DISTINCT t.id, ':', t.taskName SEPARATOR ';') as reports
+            GROUP_CONCAT(DISTINCT CONCAT(g.group_id, ':', g.group_name) SEPARATOR ';') as groups,
+            GROUP_CONCAT(DISTINCT CONCAT(r.task_id, ':', r.task_name) SEPARATOR ';') as reports
         FROM autoreport_emails e
-        LEFT JOIN autoreport_email_group_members egm ON e.id = egm.email_id
-        LEFT JOIN autoreport_email_groups g ON egm.group_id = g.id
-        LEFT JOIN autoreport_task_recipients tr ON e.id = tr.email_id
-        LEFT JOIN autoreport_tasks t ON tr.task_id = t.id
+        LEFT JOIN email_groups g ON e.id = g.email_id
+        LEFT JOIN email_reports r ON e.id = r.email_id
         {where_clause}
         GROUP BY e.id, e.email
         ORDER BY e.email
         LIMIT %s OFFSET %s
         """
-        query_params = params + [page_size, offset]
+        
+        # 构建参数列表
+        query_params = []
+        if search_text:
+            # 为三个子查询中的email_filter添加参数
+            query_params.extend([params[0], params[0], params[0]])
+            # 为主查询的where_clause添加参数
+            query_params.append(params[0])
+        
+        # 添加分页参数
+        query_params.extend([page_size, offset])
+        
         logger.debug(f"执行SQL: {query}, 参数: {query_params}")
         cursor.execute(query, query_params)
         emails = cursor.fetchall()
@@ -145,24 +198,65 @@ def search_emails(search_text, page=1, page_size=10):
         # 计算分页
         offset = (page - 1) * page_size
 
-        # 使用 JOIN 一次性获取邮箱、分组和报表信息
-        query = f"""
+        # 使用复杂查询获取邮箱直接关联的报表和通过邮箱组关联的报表
+        query = """
+        WITH email_reports AS (
+            -- 邮箱直接关联的报表
+            SELECT 
+                e.id as email_id, 
+                e.email,
+                t.id as task_id, 
+                t.taskName as task_name
+            FROM autoreport_emails e
+            LEFT JOIN autoreport_task_recipients tr ON e.id = tr.email_id
+            LEFT JOIN autoreport_tasks t ON tr.task_id = t.id
+            WHERE tr.email_id IS NOT NULL AND t.id IS NOT NULL
+            AND e.email LIKE %s
+            
+            UNION
+            
+            -- 通过邮箱组关联的报表
+            SELECT 
+                e.id as email_id, 
+                e.email,
+                t.id as task_id, 
+                t.taskName as task_name
+            FROM autoreport_emails e
+            JOIN autoreport_email_group_members egm ON e.id = egm.email_id
+            JOIN autoreport_task_recipients tr ON egm.group_id = tr.group_id
+            JOIN autoreport_tasks t ON tr.task_id = t.id
+            WHERE tr.group_id IS NOT NULL AND t.id IS NOT NULL
+            AND e.email LIKE %s
+        ),
+        email_groups AS (
+            -- 邮箱所属的组
+            SELECT 
+                e.id as email_id, 
+                e.email,
+                g.id as group_id, 
+                g.group_name
+            FROM autoreport_emails e
+            LEFT JOIN autoreport_email_group_members egm ON e.id = egm.email_id
+            LEFT JOIN autoreport_email_groups g ON egm.group_id = g.id
+            WHERE egm.group_id IS NOT NULL
+            AND e.email LIKE %s
+        )
+        
         SELECT 
             e.id, 
             e.email,
-            GROUP_CONCAT(DISTINCT g.id, ':', g.group_name SEPARATOR ';') as groups,
-            GROUP_CONCAT(DISTINCT t.id, ':', t.taskName SEPARATOR ';') as reports
+            GROUP_CONCAT(DISTINCT CONCAT(g.group_id, ':', g.group_name) SEPARATOR ';') as groups,
+            GROUP_CONCAT(DISTINCT CONCAT(r.task_id, ':', r.task_name) SEPARATOR ';') as reports
         FROM autoreport_emails e
-        LEFT JOIN autoreport_email_group_members egm ON e.id = egm.email_id
-        LEFT JOIN autoreport_email_groups g ON egm.group_id = g.id
-        LEFT JOIN autoreport_task_recipients tr ON e.id = tr.email_id
-        LEFT JOIN autoreport_tasks t ON tr.task_id = t.id
+        LEFT JOIN email_groups g ON e.id = g.email_id
+        LEFT JOIN email_reports r ON e.id = r.email_id
         WHERE e.email LIKE %s
         GROUP BY e.id, e.email
         ORDER BY e.email
         LIMIT %s OFFSET %s
         """
-        cursor.execute(query, (f'%{search_text}%', page_size, offset))
+        search_param = f'%{search_text}%'
+        cursor.execute(query, (search_param, search_param, search_param, search_param, page_size, offset))
         emails = cursor.fetchall()
         logger.debug(f"获取到 {len(emails)} 个邮箱")
 
