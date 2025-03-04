@@ -333,11 +333,12 @@
 import axios from 'axios'
 import { getToken } from '@/utils/auth'
 import DeleteConfirmationDialog from '@/components/DeleteConfirmationDialog.vue'
+import settings from '@/settings'
 
 // 创建一个axios实例，设置基础URL和请求头
 const apiClient = axios.create({
-  // 直接使用完整的后端URL
-  baseURL: 'http://localhost:5002',
+  // 使用settings中的服务器地址替代硬编码的localhost
+  baseURL: `http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}`,
   headers: {
     'Content-Type': 'application/json'
   },
