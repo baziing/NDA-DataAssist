@@ -250,6 +250,16 @@
           </el-col>
         </el-row>
 
+        <el-form-item label="执行时间">
+          <el-time-picker
+            v-model="editForm.time"
+            placeholder="选择时间"
+            format="HH:mm"
+            value-format="HH:mm"
+            class="execution-time-picker"
+          />
+        </el-form-item>
+
         <!-- 邮件地址选择 -->
         <el-form-item label="邮件地址">
           <el-select
@@ -292,19 +302,6 @@
         </el-form-item>
         <!-- 邮件地址选择结束 -->
 
-        <el-row>
-          <el-col :span="12">
-            <el-form-item label="执行时间">
-              <el-time-picker
-                v-model="editForm.time"
-                placeholder="选择时间"
-                format="HH:mm"
-                value-format="HH:mm"
-                class="execution-time-picker"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
         <el-form-item label="开启调度" prop="isEnabled">
           <el-switch
             v-model="editForm.isEnabled"
