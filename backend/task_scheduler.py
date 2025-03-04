@@ -16,6 +16,10 @@ from backend.tools.excel_utils import check_excel_file
 from backend.config.mail_config import MAIL_CONFIG
 from backend.tools.mail.email_sender import EmailSender
 from backend.utils import connect_db, execute_query  # 导入数据库连接函数
+from email.mime.base import MIMEBase
+from email import encoders
+from email.header import Header
+import urllib.parse
 
 # 配置日志
 log_dir = 'logs'
@@ -313,6 +317,12 @@ class TaskScheduler:
             else:
                 logging.info(f"任务 {task_info['taskName']} 执行完成，报表已生成: {output_path}")
 
+            # 确保文件路径以 .xlsx 结尾
+            if not output_path.lower().endswith('.xlsx'):
+                new_output_path = output_path + '.xlsx'
+                os.rename(output_path, new_output_path)
+                output_path = new_output_path
+
             # 更新数据库
             now = datetime.now()
             next_run_at = calculate_next_run_at(task_info['frequency'], task_info['dayOfMonth'], task_info['dayOfWeek'], task_info['time'])
@@ -323,6 +333,74 @@ class TaskScheduler:
                 cursor.execute(update_sql, update_values)
                 self.connection.commit()
                 logging.info(f"任务 {task_info['taskName']} 数据库更新成功")
+                
+                # 如果成功生成报表，发送邮件
+                if output_path:
+                    try:
+                        # 获取任务的收件人邮箱列表
+                        cursor.execute("""
+                            WITH task_emails AS (
+                                -- 直接关联的邮箱
+                                SELECT e.email
+                                FROM autoreport_emails e
+                                JOIN autoreport_task_recipients tr ON e.id = tr.email_id
+                                WHERE tr.task_id = %s
+                                
+                                UNION
+                                
+                                -- 通过邮箱组关联的邮箱
+                                SELECT e.email
+                                FROM autoreport_emails e
+                                JOIN autoreport_email_group_members egm ON e.id = egm.email_id
+                                JOIN autoreport_task_recipients tr ON egm.group_id = tr.group_id
+                                WHERE tr.task_id = %s
+                            )
+                            SELECT email FROM task_emails ORDER BY email
+                        """, (task_id, task_id))
+                        
+                        recipients = [row[0] for row in cursor.fetchall()]
+                        
+                        if recipients:
+                            # 获取Excel文件名（不包含路径和扩展名）
+                            excel_filename = os.path.basename(output_path)
+                            excel_name_without_ext = os.path.splitext(excel_filename)[0]
+                            
+                            # 使用任务的游戏类型创建邮件主题和正文
+                            game_type = task_data['gameType']  # 使用之前查询到的任务数据
+                            subject = f"【{game_type}】{excel_name_without_ext}"
+                            body = f"Dear all,\n\n请查收 {subject}。"
+
+                            # 发送邮件
+                            sender = EmailSender()
+                            logging.info(f"任务 {task_info['taskName']} 的 output_path: {output_path}")
+                            try:
+                                with open(output_path, 'rb') as attachment:
+                                    part = MIMEBase('application', 'octet-stream')
+                                    part.set_payload(attachment.read())
+                                encoders.encode_base64(part)
+                                
+                                # 修改这里，使用更简单的方式处理中文文件名
+                                filename = os.path.basename(output_path)
+                                # 直接使用RFC 5987编码方式，不使用Header类
+                                encoded_filename = urllib.parse.quote(filename)
+                                part.add_header(
+                                    'Content-Disposition',
+                                    f'attachment; filename*=UTF-8\'\'{encoded_filename}'
+                                )
+                                
+                                sender.send_email(
+                                    subject=subject,
+                                    recipients=recipients,
+                                    body=body,
+                                    attachments=[part]  # 这里传入的是MIMEBase对象
+                                )
+                                logging.info(f"任务 {task_info['taskName']} 邮件发送成功，收件人: {', '.join(recipients)}")
+                            except Exception as e:
+                                logging.error(f"任务 {task_info['taskName']} 邮件发送失败: {e}")
+                        else:
+                            logging.info(f"任务 {task_info['taskName']} 没有配置收件人，跳过邮件发送")
+                    except Exception as e:
+                        logging.error(f"任务 {task_info['taskName']} 邮件发送失败: {e}") # 这行重复了，删除
             except Exception as e:
                 logging.error(f"任务 {task_info['taskName']} 数据库更新失败: {e}")
             finally:

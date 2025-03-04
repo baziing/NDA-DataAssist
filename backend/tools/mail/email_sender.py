@@ -8,8 +8,11 @@ import re
 import logging
 from datetime import datetime
 from typing import List, Optional
+import mimetypes  # 导入 mimetypes 模块
 import sys
 import os
+import urllib.parse
+from email.header import Header
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from config import EMAIL_CONFIG
 
@@ -72,7 +75,7 @@ class EmailSender:
             recipients: 收件人列表（必填）
             body: 邮件正文（可选）
             cc: 抄送人列表（可选）
-            attachments: 附件路径列表（可选）
+            attachments: 附件路径列表或MIMEBase对象列表（可选）
         """
         if not subject:
             raise ValueError("邮件主题不能为空")
@@ -102,19 +105,39 @@ class EmailSender:
 
         # 添加附件
         if attachments:
-            for file_path in attachments:
+            for attachment_item in attachments:
                 try:
-                    with open(file_path, 'rb') as attachment:
-                        part = MIMEBase('application', 'octet-stream')
-                        part.set_payload(attachment.read())
-                    encoders.encode_base64(part)
-                    part.add_header(
-                        'Content-Disposition',
-                        f'attachment; filename={os.path.basename(file_path)}'
-                    )
-                    msg.attach(part)
+                    # 检查是否为MIMEBase对象
+                    if isinstance(attachment_item, MIMEBase):
+                        # 直接添加MIMEBase对象
+                        msg.attach(attachment_item)
+                    else:
+                        # 假设是文件路径
+                        file_path = attachment_item
+                        with open(file_path, 'rb') as attachment:
+                            # 推断附件的 MIME 类型
+                            mime_type, encoding = mimetypes.guess_type(file_path)
+                            if mime_type is None:
+                                mime_type = 'application/octet-stream'
+                            
+                            maintype, subtype = mime_type.split('/', 1)
+                            part = MIMEBase(maintype, subtype)
+                            part.set_payload(attachment.read())
+                        encoders.encode_base64(part)
+                        
+                        # 修改这里，使用更简单的方式处理中文文件名
+                        filename = os.path.basename(file_path)
+                        # 直接使用RFC 5987编码方式，不使用Header类
+                        encoded_filename = urllib.parse.quote(filename)
+                        part.add_header(
+                            'Content-Disposition',
+                            f'attachment; filename*=UTF-8\'\'{encoded_filename}'
+                        )
+                        
+                        msg.attach(part)
                 except Exception as e:
-                    raise ValueError(f"无法添加附件 {file_path}: {str(e)}")
+                    logging.error(f"无法添加附件 {attachment_item}: {e}")
+                    return False
 
         # 发送邮件
         try:
