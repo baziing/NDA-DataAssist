@@ -142,15 +142,58 @@ def register_task_management_routes(app, task_scheduler):
             cursor.execute(sql, (task_id,))
             task = cursor.fetchone()
             
-            # 关闭数据库连接
-            cursor.close()
-            connection.close()
-            
             if task is None:
+                cursor.close()
+                connection.close()
                 return jsonify({'error': '任务不存在'}), 404
             
             # 将 task_id 转换为字符串类型
             task['id'] = str(task['id'])
+            
+            # 查询任务的收件人信息
+            recipients = []
+            
+            # 查询关联的邮件组
+            sql = """
+                SELECT g.id, g.group_name, 'group' as type
+                FROM autoreport_email_groups g
+                JOIN autoreport_task_recipients tr ON g.id = tr.group_id
+                WHERE tr.task_id = %s
+            """
+            cursor.execute(sql, (task_id,))
+            email_groups = cursor.fetchall()
+            
+            # 查询关联的个人邮件
+            sql = """
+                SELECT e.id, e.email, 'email' as type
+                FROM autoreport_emails e
+                JOIN autoreport_task_recipients tr ON e.id = tr.email_id
+                WHERE tr.task_id = %s
+            """
+            cursor.execute(sql, (task_id,))
+            emails = cursor.fetchall()
+            
+            # 合并收件人信息
+            for group in email_groups:
+                recipients.append({
+                    'id': f"group-{group['id']}",
+                    'name': group['group_name'],
+                    'type': 'group'
+                })
+                
+            for email in emails:
+                recipients.append({
+                    'id': f"email-{email['id']}",
+                    'email': email['email'],
+                    'type': 'email'
+                })
+            
+            # 将收件人信息添加到任务中
+            task['recipients'] = recipients
+            
+            # 关闭数据库连接
+            cursor.close()
+            connection.close()
             
             return jsonify(task), 200
             
@@ -170,6 +213,7 @@ def register_task_management_routes(app, task_scheduler):
             day_of_week = data.get('dayOfWeek')
             time = data.get('time')
             is_enabled = data.get('isEnabled', True)
+            recipients = data.get('recipients', [])  # 获取收件人列表
             
             logging.info(f"更新任务 - 接收到的数据: {data}")
             
@@ -202,26 +246,64 @@ def register_task_management_routes(app, task_scheduler):
                     connection.close()
                     return jsonify({"message": "计算下次运行时间失败"}), 500
             
-            # 更新任务信息
-            sql = """
-                UPDATE autoreport_tasks
-                SET gameType = %s, taskName = %s, frequency = %s, 
-                    dayOfMonth = %s, dayOfWeek = %s, time = %s,
-                    next_run_at = %s, last_modified_at = NOW(),
-                    is_enabled = %s
-                WHERE id = %s
-            """
-            values = (
-                game_type, task_name, frequency,
-                day_of_month if day_of_month else None,
-                day_of_week if day_of_week else None,
-                time, next_run_at, is_enabled, task_id
-            )
+            # 开始事务
+            connection.start_transaction()
             
-            logging.info(f"更新任务 - SQL: {sql}, 参数: {values}")
-            cursor.execute(sql, values)
-            connection.commit()
-            logging.info(f"更新任务 - 影响行数: {cursor.rowcount}")
+            try:
+                # 更新任务信息
+                sql = """
+                    UPDATE autoreport_tasks
+                    SET gameType = %s, taskName = %s, frequency = %s, 
+                        dayOfMonth = %s, dayOfWeek = %s, time = %s,
+                        next_run_at = %s, last_modified_at = NOW(),
+                        is_enabled = %s
+                    WHERE id = %s
+                """
+                values = (
+                    game_type, task_name, frequency,
+                    day_of_month if day_of_month else None,
+                    day_of_week if day_of_week else None,
+                    time, next_run_at, is_enabled, task_id
+                )
+                
+                logging.info(f"更新任务 - SQL: {sql}, 参数: {values}")
+                cursor.execute(sql, values)
+                
+                # 更新收件人信息
+                # 先删除现有的收件人关联
+                sql = "DELETE FROM autoreport_task_recipients WHERE task_id = %s"
+                cursor.execute(sql, (task_id,))
+                
+                # 添加新的收件人关联
+                if recipients:
+                    for recipient in recipients:
+                        # 解析收件人ID和类型（邮件组或个人邮件）
+                        recipient_parts = recipient.split('-')
+                        if len(recipient_parts) == 2:
+                            recipient_type, recipient_id = recipient_parts
+                            
+                            if recipient_type == 'group':
+                                # 添加邮件组关联
+                                sql = "INSERT INTO autoreport_task_recipients (task_id, group_id) VALUES (%s, %s)"
+                                values = (task_id, recipient_id)
+                                cursor.execute(sql, values)
+                            elif recipient_type == 'email':
+                                # 添加个人邮件关联
+                                sql = "INSERT INTO autoreport_task_recipients (task_id, email_id) VALUES (%s, %s)"
+                                values = (task_id, recipient_id)
+                                cursor.execute(sql, values)
+                
+                # 提交事务
+                connection.commit()
+                logging.info(f"更新任务 - 影响行数: {cursor.rowcount}")
+                
+            except Exception as e:
+                # 回滚事务
+                connection.rollback()
+                logging.error(f"更新任务失败: {str(e)}", exc_info=True)
+                cursor.close()
+                connection.close()
+                return jsonify({"message": f"更新任务失败: {str(e)}"}), 500
             
             # 关闭数据库连接
             cursor.close()
@@ -248,29 +330,39 @@ def register_task_management_routes(app, task_scheduler):
             # 开始事务
             connection.start_transaction()
             
-            # 删除任务相关的SQL模板
-            sql = "DELETE FROM autoreport_templates WHERE task_id = %s"
-            cursor.execute(sql, (str(task_id),))
-            
-            # 删除任务
-            sql = "DELETE FROM autoreport_tasks WHERE id = %s"
-            cursor.execute(sql, (str(task_id),))
-            
-            # 提交事务
-            connection.commit()
-            
-            # 关闭数据库连接
-            cursor.close()
-            connection.close()
-            
-            # 重新加载任务
-            task_scheduler.load_tasks()
-            
-            return jsonify({"message": "任务删除成功！"}), 200
+            try:
+                # 删除任务相关的收件人关联
+                sql = "DELETE FROM autoreport_task_recipients WHERE task_id = %s"
+                cursor.execute(sql, (str(task_id),))
+                
+                # 删除任务相关的SQL模板
+                sql = "DELETE FROM autoreport_templates WHERE task_id = %s"
+                cursor.execute(sql, (str(task_id),))
+                
+                # 删除任务
+                sql = "DELETE FROM autoreport_tasks WHERE id = %s"
+                cursor.execute(sql, (str(task_id),))
+                
+                # 提交事务
+                connection.commit()
+                
+                # 重新加载任务
+                task_scheduler.load_tasks()
+                
+                return jsonify({"message": "任务删除成功！"}), 200
+                
+            except Exception as e:
+                # 回滚事务
+                connection.rollback()
+                logging.error(f"删除任务失败: {str(e)}", exc_info=True)
+                return jsonify({"message": f"删除任务失败: {str(e)}"}), 500
+                
+            finally:
+                # 关闭数据库连接
+                cursor.close()
+                connection.close()
             
         except Exception as e:
-            if connection and connection.is_connected():
-                connection.rollback()
             logging.error(f"删除任务失败: {str(e)}", exc_info=True)
             return jsonify({"message": f"删除任务失败: {str(e)}"}), 500
 
@@ -288,40 +380,56 @@ def register_task_management_routes(app, task_scheduler):
             task_ids = [str(task_id) for task_id in task_ids]
             
             # 连接数据库
+            connection = None
+            cursor = None
             try:
                 connection = mysql.connector.connect(**DB_CONFIG)
                 cursor = connection.cursor()
-                logging.info("更新任务 - 数据库连接成功")
+                logging.info("批量删除任务 - 数据库连接成功")
+                
+                # 开始事务
+                connection.start_transaction()
+                
+                # 更新任务信息
+                placeholders = ', '.join(['%s'] * len(task_ids))
+                
+                # 删除任务相关的收件人关联
+                sql = f"DELETE FROM autoreport_task_recipients WHERE task_id IN ({placeholders})"
+                cursor.execute(sql, task_ids)
+                
+                # 删除任务相关的SQL模板
+                sql = f"DELETE FROM autoreport_templates WHERE task_id IN ({placeholders})"
+                cursor.execute(sql, task_ids)
+                
+                # 删除任务
+                sql = f"DELETE FROM autoreport_tasks WHERE id IN ({placeholders})"
+                cursor.execute(sql, task_ids)
+                
+                # 提交事务
+                connection.commit()
+                
+                # 关闭数据库连接
+                cursor.close()
+                connection.close()
+                
+                # 重新加载任务
+                task_scheduler.load_tasks()
+                
+                return jsonify({"message": f"成功删除 {len(task_ids)} 个任务！"}), 200
+                
             except Exception as e:
-                logging.error(f"更新任务 - 数据库连接失败: {str(e)}", exc_info=True)
-                return jsonify({"message": f"数据库连接失败: {str(e)}"}), 500
-            
-            # 更新任务信息
-            placeholders = ', '.join(['%s'] * len(task_ids))
-            
-            # 删除任务相关的SQL模板
-            sql = f"DELETE FROM autoreport_templates WHERE task_id IN ({placeholders})"
-            cursor.execute(sql, task_ids)
-            
-            # 删除任务
-            sql = f"DELETE FROM autoreport_tasks WHERE id IN ({placeholders})"
-            cursor.execute(sql, task_ids)
-            
-            # 提交事务
-            connection.commit()
-            
-            # 关闭数据库连接
-            cursor.close()
-            connection.close()
-            
-            # 重新加载任务
-            task_scheduler.load_tasks()
-            
-            return jsonify({"message": f"成功删除 {len(task_ids)} 个任务！"}), 200
-            
+                if connection and connection.is_connected():
+                    connection.rollback()
+                logging.error(f"批量删除任务失败: {str(e)}", exc_info=True)
+                return jsonify({"message": f"批量删除任务失败: {str(e)}"}), 500
+                
+            finally:
+                if connection and connection.is_connected():
+                    if cursor:
+                        cursor.close()
+                    connection.close()
+                
         except Exception as e:
-            if connection and connection.is_connected():
-                connection.rollback()
             logging.error(f"批量删除任务失败: {str(e)}", exc_info=True)
             return jsonify({"message": f"批量删除任务失败: {str(e)}"}), 500
 

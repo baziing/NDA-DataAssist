@@ -192,6 +192,7 @@ def create_task_api():
         day_of_month = data.get('dayOfMonth')
         day_of_week = data.get('dayOfWeek')
         time = data.get('time')
+        recipients = data.get('recipients', [])  # 获取收件人列表
 
         if not filename or not game_type or not task_name or not frequency or not time:
             return jsonify({"message": "请填写所有必填项！"}), 400
@@ -268,6 +269,25 @@ def create_task_api():
                 values = (str(task_id), row['db_name'], row['output_sql'], sql_order, row.get('transpose', False), row.get('format'), row.get('pos'))
                 cursor.execute(sql, values)
                 sql_order += 1
+                
+            # 处理收件人信息
+            if recipients:
+                for recipient in recipients:
+                    # 解析收件人ID和类型（邮件组或个人邮件）
+                    recipient_parts = recipient.split('-')
+                    if len(recipient_parts) == 2:
+                        recipient_type, recipient_id = recipient_parts
+                        
+                        if recipient_type == 'group':
+                            # 添加邮件组关联
+                            sql = "INSERT INTO autoreport_task_recipients (task_id, group_id) VALUES (%s, %s)"
+                            values = (task_id, recipient_id)
+                            cursor.execute(sql, values)
+                        elif recipient_type == 'email':
+                            # 添加个人邮件关联
+                            sql = "INSERT INTO autoreport_task_recipients (task_id, email_id) VALUES (%s, %s)"
+                            values = (task_id, recipient_id)
+                            cursor.execute(sql, values)
 
             # 提交事务
             connection.commit()
@@ -276,12 +296,12 @@ def create_task_api():
             # 重新加载任务
             task_scheduler.load_tasks()
 
-            return jsonify({"message": "任务创建成功！"}), 200
+            return jsonify({"message": "任务创建成功！", "task_id": task_id, "next_run_at": next_run_at}), 200
 
         except Exception as e:
             if connection and connection.is_connected():
                 connection.rollback()  # 回滚事务
-            logging.error(f"插入 autoreport_templates 失败，当前 sql_statement: {sql_statement}, 错误信息: {str(e)}", exc_info=True)
+            logging.error(f"插入数据失败，当前 sql_statement: {sql_statement}, 错误信息: {str(e)}", exc_info=True)
             return jsonify({"message": f"数据库操作失败: {str(e)}"}), 500
 
         finally:

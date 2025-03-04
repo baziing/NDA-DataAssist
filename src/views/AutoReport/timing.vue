@@ -102,10 +102,10 @@
             <el-option
               v-for="group in emailGroups"
               :key="'group-' + group.id"
-              :label="group.name"
+              :label="group.group_name"
               :value="'group-' + group.id"
             >
-              <span style="float: left">{{ group.name }}</span>
+              <span style="float: left">{{ group.group_name }}</span>
               <span style="float: right; color: #8492a6; font-size: 13px">邮件组</span>
             </el-option>
           </el-option-group>
@@ -116,7 +116,7 @@
               :label="email.name ? email.name + ' <' + email.email + '>' : email.email"
               :value="'email-' + email.id"
             >
-              <i v-if="task.filename" class="el-icon-delete" style="margin-left: 10px;" @click="handleFileRemove(null, [])" />
+              <span style="float: left">{{ email.email }}</span>
               <span style="float: right; color: #8492a6; font-size: 13px">个人</span>
             </el-option>
           </el-option-group>
@@ -210,7 +210,7 @@ export default {
         })
         .then(data => {
           console.log('邮件地址列表:', data)
-          this.emails = data
+          this.emails = data.items || []
         })
         .catch(error => {
           console.error('获取邮件地址失败:', error)
