@@ -261,7 +261,7 @@
         </el-form-item>
 
         <!-- 邮件地址选择 -->
-        <el-form-item label="邮件地址">
+        <el-form-item label="邮件地址" style="margin-right: 50px;">
           <el-select
             v-model="editForm.recipients"
             multiple
