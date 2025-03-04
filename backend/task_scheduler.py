@@ -14,7 +14,7 @@ import logging
 from backend.config import DB_CONFIG
 from backend.tools.excel_utils import check_excel_file
 from backend.config.mail_config import MAIL_CONFIG
-from backend.tools.mail.email_sender import EmailSender
+from backend.email_sender import EmailSender
 from backend.utils import connect_db, execute_query  # 导入数据库连接函数
 from email.mime.base import MIMEBase
 from email import encoders

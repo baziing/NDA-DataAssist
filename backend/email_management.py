@@ -2,7 +2,7 @@ import logging
 import json
 import traceback
 from mysql.connector import Error
-from utils import connect_db, execute_query
+from backend.utils import connect_db, execute_query
 
 # 设置更详细的日志格式
 logging.basicConfig(

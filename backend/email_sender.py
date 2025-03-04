@@ -10,11 +10,10 @@ from datetime import datetime
 from typing import List, Optional
 import mimetypes  # 导入 mimetypes 模块
 import sys
-import os
 import urllib.parse
 from email.header import Header
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from config import EMAIL_CONFIG
+# 修改导入路径
+from .config import EMAIL_CONFIG
 
 class EmailSender:
     def __init__(self):
@@ -184,4 +183,4 @@ if __name__ == "__main__":
         if success:
             print("邮件发送成功")
     except Exception as e:
-        print(f"邮件发送失败: {str(e)}")
+        print(f"邮件发送失败: {str(e)}") 
