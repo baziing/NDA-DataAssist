@@ -94,6 +94,141 @@ def register_task_management_routes(app, task_scheduler):
             logging.error(f"获取任务列表失败: {str(e)}", exc_info=True)
             return jsonify({'error': f'获取任务列表失败: {str(e)}'}), 500
 
+    @app.route('/task_management/task_recipients/<string:task_id>', methods=['GET'])
+    def get_task_recipients(task_id):
+        """获取任务的收件人信息"""
+        try:
+            logging.info(f"获取任务收件人信息，任务ID: {task_id}")
+            conn = mysql.connector.connect(**DB_CONFIG)
+            cursor = conn.cursor(dictionary=True)
+            
+            # 查询任务收件人 - 使用正确的表名 autoreport_tasks
+            try:
+                cursor.execute(
+                    "SELECT id FROM autoreport_tasks WHERE id = %s",
+                    (task_id,)
+                )
+                
+                task = cursor.fetchone()
+                
+                if not task:
+                    logging.warning(f"任务不存在，ID: {task_id}")
+                    return jsonify({"recipients": [], "warning": "任务不存在"}), 200
+                
+                # 查询任务收件人关联表
+                cursor.execute(
+                    """
+                    SELECT 
+                        tr.id, 
+                        CASE 
+                            WHEN tr.email_id IS NOT NULL THEN CONCAT('email-', tr.email_id) 
+                            WHEN tr.group_id IS NOT NULL THEN CONCAT('group-', tr.group_id)
+                        END as recipient_id
+                    FROM autoreport_task_recipients tr
+                    WHERE tr.task_id = %s
+                    """,
+                    (task_id,)
+                )
+                
+                recipients = cursor.fetchall()
+                recipients_list = [r['recipient_id'] for r in recipients if r['recipient_id']]
+                
+            except mysql.connector.Error as db_err:
+                # 如果是表不存在错误，尝试旧的方式
+                if db_err.errno == 1146:  # 表不存在错误码
+                    logging.warning(f"表不存在，尝试使用旧方式: {str(db_err)}")
+                    return jsonify({"recipients": [], "warning": "数据库结构需要更新"}), 200
+                else:
+                    raise
+            
+            cursor.close()
+            conn.close()
+            
+            logging.info(f"成功获取任务收件人，任务ID: {task_id}, 收件人数量: {len(recipients_list)}")
+            return jsonify({"recipients": recipients_list})
+            
+        except Exception as e:
+            logging.error(f"获取任务收件人失败: {str(e)}")
+            # 返回空列表而不是错误，避免前端崩溃
+            return jsonify({"recipients": [], "error": str(e)}), 200
+    
+    @app.route('/task_management/task_recipients/<string:task_id>', methods=['PUT'])
+    def update_task_recipients(task_id):
+        """更新任务的收件人信息"""
+        try:
+            logging.info(f"更新任务收件人信息，任务ID: {task_id}")
+            data = request.json
+            recipients = data.get('recipients', [])
+            
+            conn = mysql.connector.connect(**DB_CONFIG)
+            cursor = conn.cursor()
+            
+            try:
+                # 首先检查任务是否存在
+                cursor.execute(
+                    "SELECT id FROM autoreport_tasks WHERE id = %s",
+                    (task_id,)
+                )
+                
+                if not cursor.fetchone():
+                    logging.warning(f"任务不存在，无法更新收件人，ID: {task_id}")
+                    return jsonify({"warning": "任务不存在"}), 404
+                
+                # 删除现有的收件人关联
+                cursor.execute(
+                    "DELETE FROM autoreport_task_recipients WHERE task_id = %s",
+                    (task_id,)
+                )
+                
+                # 添加新的收件人关联
+                for recipient in recipients:
+                    if recipient.startswith('email-'):
+                        email_id = recipient.replace('email-', '')
+                        cursor.execute(
+                            "INSERT INTO autoreport_task_recipients (task_id, email_id, created_at, updated_at) VALUES (%s, %s, NOW(), NOW())",
+                            (task_id, email_id)
+                        )
+                    elif recipient.startswith('group-'):
+                        group_id = recipient.replace('group-', '')
+                        cursor.execute(
+                            "INSERT INTO autoreport_task_recipients (task_id, group_id, created_at, updated_at) VALUES (%s, %s, NOW(), NOW())",
+                            (task_id, group_id)
+                        )
+                
+                # 更新任务的最后修改时间
+                cursor.execute(
+                    "UPDATE autoreport_tasks SET last_modified_at = NOW() WHERE id = %s",
+                    (task_id,)
+                )
+                
+            except mysql.connector.Error as db_err:
+                # 如果是表不存在错误，尝试旧的方式
+                if db_err.errno == 1146:  # 表不存在错误码
+                    logging.warning(f"表不存在，尝试使用旧方式: {str(db_err)}")
+                    # 将收件人列表转换为逗号分隔的字符串，兼容旧版本
+                    recipients_str = ','.join(recipients) if recipients else ''
+                    try:
+                        cursor.execute(
+                            "UPDATE tasks SET recipients = %s, last_modified_at = NOW() WHERE id = %s",
+                            (recipients_str, task_id)
+                        )
+                    except Exception as e:
+                        logging.error(f"使用旧方式更新收件人失败: {str(e)}")
+                        return jsonify({"error": "数据库结构需要更新，无法保存收件人"}), 200
+                else:
+                    raise
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
+            logging.info(f"成功更新任务收件人，任务ID: {task_id}, 收件人数量: {len(recipients)}")
+            return jsonify({"message": "收件人更新成功"})
+            
+        except Exception as e:
+            logging.error(f"更新任务收件人失败: {str(e)}")
+            return jsonify({"error": f"更新任务收件人失败: {str(e)}"}), 200
+
     @app.route('/task_management/task_sql/<string:task_id>', methods=['GET'])
     def get_task_sql(task_id):
         """获取指定任务的SQL信息"""

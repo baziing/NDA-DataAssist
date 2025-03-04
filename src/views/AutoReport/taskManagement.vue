@@ -249,6 +249,49 @@
             </el-form-item>
           </el-col>
         </el-row>
+
+        <!-- 邮件地址选择 -->
+        <el-form-item label="邮件地址">
+          <el-select
+            v-model="editForm.recipients"
+            multiple
+            filterable
+            placeholder="请选择收件人"
+            style="width: 100%;"
+            @tag-close="handleTagClose"
+          >
+            <template slot="prefix">
+              <i class="el-icon-message" style="color: #909399;" />
+            </template>
+            <el-option-group label="邮件组">
+              <el-option
+                v-for="group in emailGroups"
+                :key="'group-' + group.id"
+                :label="group.group_name"
+                :value="'group-' + group.id"
+                class="email-group-option"
+              >
+                <span style="float: left">{{ group.group_name }}</span>
+                <span style="float: right; color: #409EFF; font-size: 13px">邮件组</span>
+              </el-option>
+            </el-option-group>
+            <el-option-group label="邮件地址">
+              <el-option
+                v-for="email in emails"
+                :key="'email-' + email.id"
+                :label="email.name ? email.name + ' <' + email.email + '>' : email.email"
+                :value="'email-' + email.id"
+                class="email-address-option"
+              >
+                <span style="float: left">{{ email.email }}</span>
+                <span style="float: right; color: #67C23A; font-size: 13px">个人</span>
+              </el-option>
+            </el-option-group>
+          </el-select>
+          <div class="form-tip">可以选择多个邮件组或邮件地址作为收件人</div>
+        </el-form-item>
+        <!-- 邮件地址选择结束 -->
+
         <el-row>
           <el-col :span="12">
             <el-form-item label="执行时间">
@@ -418,7 +461,8 @@ export default {
         time: '',
         dayOfWeek: '',
         dayOfMonth: '',
-        isEnabled: true
+        isEnabled: true,
+        recipients: []
       },
       sortParams: [
         { field: 'last_run_at', order: 'desc' },
@@ -437,11 +481,39 @@ export default {
       deleteConfirmMessage: '',
       deleteConfirmLoading: false,
       taskToDelete: null,
-      batchDeleteMode: false
+      batchDeleteMode: false,
+      emails: [],
+      emailGroups: []
+    }
+  },
+  watch: {
+    // 监听收件人变化，应用样式
+    'editForm.recipients': {
+      handler() {
+        this.$nextTick(() => {
+          this.applyTagStyles()
+        })
+      },
+      deep: true
     }
   },
   created() {
     this.fetchTasks()
+    // 获取邮件地址列表
+    this.fetchEmails()
+    // 获取邮件组列表
+    this.fetchEmailGroups()
+  },
+  mounted() {
+    // 组件挂载后应用样式
+    this.applyTagStyles()
+
+    // 添加全局点击事件监听器，确保在选择器展开/收起时应用样式
+    document.addEventListener('click', this.handleGlobalClick)
+  },
+  beforeDestroy() {
+    // 组件销毁前移除事件监听器
+    document.removeEventListener('click', this.handleGlobalClick)
   },
   methods: {
     updateEditOutputExample() {
@@ -647,6 +719,41 @@ export default {
       this.originalTaskName = row.taskName
       this.editDialogVisible = true
       this.updateEditOutputExample() // 初始化输出示例
+
+      // 获取任务的收件人信息
+      this.fetchTaskRecipients(row.id)
+    },
+
+    // 获取任务的收件人信息
+    fetchTaskRecipients(taskId) {
+      console.log(`正在获取任务 ${taskId} 的收件人信息`)
+      fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/task_management/task_recipients/${taskId}`)
+        .then(response => {
+          return response.json() // 即使状态码是错误的，也尝试解析响应
+        })
+        .then(data => {
+          console.log('任务收件人:', data)
+          if (data.error) {
+            console.warn(`获取收件人警告: ${data.error}`)
+            this.$message.warning(`获取收件人可能不完整: ${data.error}`)
+          }
+          if (data.warning) {
+            console.warn(`获取收件人警告: ${data.warning}`)
+          }
+          this.editForm.recipients = data.recipients || []
+          // 在数据加载后应用标签样式
+          this.$nextTick(() => {
+            this.applyTagStyles()
+          })
+        })
+        .catch(error => {
+          console.error('获取任务收件人失败:', error)
+          this.$message.warning('无法获取收件人信息，将使用空列表')
+          this.editForm.recipients = [] // 使用空列表作为后备
+          this.$nextTick(() => {
+            this.applyTagStyles()
+          })
+        })
     },
 
     // 验证任务名规则
@@ -775,6 +882,10 @@ export default {
           return response.json()
         })
         .then(data => {
+          // 更新收件人信息
+          return this.updateTaskRecipients(taskId, this.editForm.recipients)
+        })
+        .then(() => {
           this.$message.success('任务更新成功')
           this.updating = false
           this.editDialogVisible = false
@@ -783,6 +894,27 @@ export default {
         .catch(error => {
           this.$message.error('任务更新失败: ' + error.message)
           this.updating = false
+        })
+    },
+
+    // 更新任务收件人
+    updateTaskRecipients(taskId, recipients) {
+      return fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/task_management/task_recipients/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipients })
+      })
+        .then(response => {
+          if (!response.ok) {
+            return response.json().then(data => {
+              throw new Error(data.message || '更新收件人失败')
+            })
+          }
+          return response.json()
+        })
+        .catch(error => {
+          console.error('更新收件人失败:', error)
+          throw new Error('更新收件人失败: ' + error.message)
         })
     },
 
@@ -990,6 +1122,97 @@ export default {
       } else {
         return ''
       }
+    },
+
+    // 处理标签关闭事件
+    handleTagClose(tag) {
+      console.log('Tag closed:', tag)
+      // 在下一个DOM更新周期应用样式
+      this.$nextTick(() => {
+        this.applyTagStyles()
+      })
+    },
+
+    // 应用标签样式
+    applyTagStyles() {
+      // 获取所有标签
+      const tags = document.querySelectorAll('.el-select__tags .el-tag')
+
+      // 遍历标签并应用样式
+      tags.forEach(tag => {
+        const value = tag.textContent || ''
+
+        // 检查标签内容，根据内容判断类型
+        if (this.emailGroups.some(group => group.group_name === value.trim())) {
+          // 邮件组样式
+          tag.style.backgroundColor = '#f0f9eb'
+          tag.style.borderColor = '#e1f3d8'
+          tag.style.color = '#67c23a'
+          // 添加自定义类名
+          tag.classList.add('email-group-tag')
+          tag.classList.remove('email-address-tag')
+        } else {
+          // 个人邮件样式
+          tag.style.backgroundColor = '#ecf5ff'
+          tag.style.borderColor = '#d9ecff'
+          tag.style.color = '#409eff'
+          // 添加自定义类名
+          tag.classList.add('email-address-tag')
+          tag.classList.remove('email-group-tag')
+        }
+      })
+    },
+    // 获取邮件地址列表
+    fetchEmails() {
+      fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/emails`)
+        .then(response => {
+          if (response.ok) {
+            return response.json()
+          } else {
+            throw new Error('获取邮件地址列表失败')
+          }
+        })
+        .then(data => {
+          console.log('邮件地址列表:', data)
+          this.emails = data.items || []
+          // 在数据加载后应用标签样式
+          this.$nextTick(() => {
+            this.applyTagStyles()
+          })
+        })
+        .catch(error => {
+          console.error('获取邮件地址失败:', error)
+          this.$message.error('获取邮件地址列表失败')
+        })
+    },
+    // 获取邮件组列表
+    fetchEmailGroups() {
+      fetch(`http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/email-groups`)
+        .then(response => {
+          if (response.ok) {
+            return response.json()
+          } else {
+            throw new Error('获取邮件组列表失败')
+          }
+        })
+        .then(data => {
+          console.log('邮件组列表:', data)
+          this.emailGroups = data
+          // 在数据加载后应用标签样式
+          this.$nextTick(() => {
+            this.applyTagStyles()
+          })
+        })
+        .catch(error => {
+          console.error('获取邮件组失败:', error)
+          this.$message.error('获取邮件组列表失败')
+        })
+    },
+    handleGlobalClick() {
+      // 延迟执行，确保DOM已更新
+      setTimeout(() => {
+        this.applyTagStyles()
+      }, 100)
     }
   }
 }
@@ -1034,5 +1257,24 @@ export default {
 /* 删除按钮样式 */
 .delete-btn {
   color: #f56c6c;
+}
+
+/* 自定义邮件标签样式 */
+::v-deep .el-tag {
+  margin-right: 4px;
+}
+
+/* 邮件组样式 - 使用属性选择器 */
+::v-deep .el-tag[data-path*="group-"] {
+  background-color: #ecf5ff !important;
+  border-color: #d9ecff !important;
+  color: #409eff !important;
+}
+
+/* 邮件地址样式 - 使用属性选择器 */
+::v-deep .el-tag[data-path*="email-"] {
+  background-color: #f0f9eb !important;
+  border-color: #e1f3d8 !important;
+  color: #67c23a !important;
 }
 </style>
