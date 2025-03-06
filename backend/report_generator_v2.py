@@ -36,6 +36,7 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
     生成报表
     """
     logging.info(f'generate_report called with task: {task}')
+    output_path = None  # 初始化 output_path
     try:
         # 优先使用 data_frame，如果没有，再尝试从 input_file 读取
         if data_frame is None:
@@ -175,11 +176,24 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
             task.update_progress({'progress': progress, 'log': f'第 {index + 1} 个 SQL 应用样式'})
             
             # 应用自定义样式
-            if format_rules:
-                apply_format_rules(temp_ws, format_rules)
+            # if format_rules:
+            #     apply_format_rules(temp_ws, format_rules)  # Pass max_row
             if task.cancelled:  # 检查是否取消
                 raise Exception('Task cancelled')
-            
+
+        # Calculate max_row across all temp_ws sheets
+        max_temp_row = 0
+        for sheet_name in wb.sheetnames:
+            if sheet_name.startswith('临时表'):
+                max_temp_row = max(max_temp_row, wb[sheet_name].max_row)
+
+        # Apply formatting rules with max_row_override
+        for index, row in df.iterrows():
+            format_rules = row.get('format', '')
+            if format_rules:
+                temp_ws = wb[f'临时表_{index+1}']
+                apply_format_rules(temp_ws, format_rules, max_row_override=max_temp_row)
+
             # 初始化位置字典
             if index == 0:
                 pos_dict = {}
@@ -489,7 +503,7 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
         logging.info(f'generate_report returning: {output_path}')
         raise
 
-def apply_format_rules(worksheet, format_rules):
+def apply_format_rules(worksheet, format_rules, max_row_override=None):
     """
     应用自定义样式规则
     """
@@ -566,15 +580,15 @@ def apply_alignment(worksheet, params):
                 raise ValueError('Start row must be a positive integer')
                 
             if rows[1].lower() == 'max':
-                end_row = worksheet.max_row
+                end_row = max_row_override if max_row_override is not None else worksheet.max_row
             else:
                 end_row = int(rows[1])
-                if end_row <= 0:
-                    raise ValueError('End row must be a positive integer')
-                if start_row > end_row:
-                    raise ValueError('Start row must be less than or equal to end row')
-        except ValueError:
-            raise ValueError('Row numbers must be integers or "max"')
+            if end_row <= 0:
+                raise ValueError('End row must be a positive integer')
+            if start_row > end_row:
+                raise ValueError(f'Start row ({start_row}) must be less than or equal to end row ({end_row})')
+        except ValueError as e:
+            raise ValueError(f'Row numbers must be integers or "max". Error: {e}')
             
         # 解析列范围
         cols = parts[2].split('-')
@@ -1239,8 +1253,9 @@ def apply_color_scale(worksheet, params):
         cell_range = f"{start_cell}:{end_cell}"
         
         # 应用色阶到指定范围
+        logging.info(f"Applying color scale with range: {cell_range}, start_row: {start_row}, end_row: {end_row}, start_col: {start_col}, end_col: {end_col}")  # Add logging
         worksheet.conditional_formatting.add(cell_range, rule)
-                
+
     except Exception as e:
         logging.error(f'应用色阶失败: {e}')
         raise
