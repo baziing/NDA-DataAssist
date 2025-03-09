@@ -176,8 +176,6 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
             task.update_progress({'progress': progress, 'log': f'第 {index + 1} 个 SQL 应用样式'})
             
             # 应用自定义样式
-            # if format_rules:
-            #     apply_format_rules(temp_ws, format_rules)  # Pass max_row
             if task.cancelled:  # 检查是否取消
                 raise Exception('Task cancelled')
 
@@ -277,6 +275,11 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
             # 开始写入汇总表之前，更新进度
             progress = 5 + int((((completed_queries-1)*3+3) / total_queries/3) * 55)
             task.update_progress({'progress': progress, 'log': f'第 {index + 1} 个 SQL 结果写入汇总表'})
+
+            # 保存临时表
+            temp_file = os.path.join(UPLOAD_FOLDER, f'tmp.xlsx')
+            wb.save(temp_file)
+            logging.info(f'临时表保存路径: {os.path.abspath(temp_file)}')
             
             # 将临时表所有数据合并到汇总表，包括格式
             max_row = temp_ws.max_row
@@ -454,10 +457,10 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
         # 确保文件名在输出目录中是唯一的
         output_file = get_unique_filename(output_dir, output_file)
 
-        # 删除所有临时表
-        temp_sheets = [sheet for sheet in wb.sheetnames if sheet.startswith('临时表')]
-        for sheet_name in temp_sheets:
-            wb.remove(wb[sheet_name])
+        # # 删除所有临时表
+        # temp_sheets = [sheet for sheet in wb.sheetnames if sheet.startswith('临时表')]
+        # for sheet_name in temp_sheets:
+        #     wb.remove(wb[sheet_name])
     
         # 保存文件
         output_path = os.path.join(output_dir, output_file)
