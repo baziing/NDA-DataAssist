@@ -277,9 +277,9 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
             task.update_progress({'progress': progress, 'log': f'第 {index + 1} 个 SQL 结果写入汇总表'})
 
             # 保存临时表
-            temp_file = os.path.join(UPLOAD_FOLDER, f'tmp.xlsx')
-            wb.save(temp_file)
-            logging.info(f'临时表保存路径: {os.path.abspath(temp_file)}')
+            # temp_file = os.path.join(UPLOAD_FOLDER, f'tmp.xlsx')
+            # wb.save(temp_file)
+            # logging.info(f'临时表保存路径: {os.path.abspath(temp_file)}')
             
             # 将临时表所有数据合并到汇总表，包括格式
             max_row = temp_ws.max_row
@@ -358,8 +358,11 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
                             if new_start_col < 1:
                                 new_start_col = 1
                         
-                        # 创建新的范围字符串
-                        new_range = f"{summary_ws.cell(new_start_row, new_start_col).coordinate}:{summary_ws.cell(new_end_row, new_end_col).coordinate}"
+                        # 创建新的范围字符串，使用get_column_letter函数替代直接使用cell.coordinate
+                        from openpyxl.utils import get_column_letter
+                        new_start_col_letter = get_column_letter(new_start_col)
+                        new_end_col_letter = get_column_letter(new_end_col)
+                        new_range = f"{new_start_col_letter}{new_start_row}:{new_end_col_letter}{new_end_row}"
                         
                         # 应用条件格式到指定范围
                         summary_ws.conditional_formatting.add(new_range, cf.rules[0])
@@ -406,10 +409,11 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
             new_start_col = orig_start_col + rel_min_col + 1  # +1 因为插入了一列
             new_end_col = orig_start_col + rel_max_col + 1
             
-            # 创建新的范围字符串
-            start_cell = summary_ws.cell(row=new_start_row, column=new_start_col).coordinate
-            end_cell = summary_ws.cell(row=new_end_row, column=new_end_col).coordinate
-            new_range = f"{start_cell}:{end_cell}"
+            # 使用get_column_letter函数创建新的范围字符串
+            from openpyxl.utils import get_column_letter
+            start_col_letter = get_column_letter(new_start_col)
+            end_col_letter = get_column_letter(new_end_col)
+            new_range = f"{start_col_letter}{new_start_row}:{end_col_letter}{new_end_row}"
             
             # 应用更新后的条件格式
             summary_ws.conditional_formatting.add(new_range, rule)
@@ -419,11 +423,13 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
 
 
         # 设置第一行的列宽为3，其他列宽为13
+        from openpyxl.utils import get_column_letter
         for col in range(1, summary_ws.max_column + 1):
+            col_letter = get_column_letter(col)
             if col == 1:
-                summary_ws.column_dimensions[chr(64 + col)].width = 3  # 第一列设置为3
+                summary_ws.column_dimensions[col_letter].width = 3  # 第一列设置为3
             else:
-                summary_ws.column_dimensions[chr(64 + col)].width = 13  # 其他列设置为13
+                summary_ws.column_dimensions[col_letter].width = 13  # 其他列设置为13
         
         # 完成所有数据插入,新增标题和首列之前, 更新进度
         task.update_progress({'progress':90, 'log':'完成所有数据插入,调整样式'})
@@ -457,10 +463,10 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
         # 确保文件名在输出目录中是唯一的
         output_file = get_unique_filename(output_dir, output_file)
 
-        # # 删除所有临时表
-        # temp_sheets = [sheet for sheet in wb.sheetnames if sheet.startswith('临时表')]
-        # for sheet_name in temp_sheets:
-        #     wb.remove(wb[sheet_name])
+        # 删除所有临时表
+        temp_sheets = [sheet for sheet in wb.sheetnames if sheet.startswith('临时表')]
+        for sheet_name in temp_sheets:
+            wb.remove(wb[sheet_name])
     
         # 保存文件
         output_path = os.path.join(output_dir, output_file)
@@ -1177,8 +1183,13 @@ def apply_data_bar(worksheet, params):
                           minLength=None,
                           maxLength=None)
         
+        # 使用get_column_letter函数替代直接使用cell.coordinate
+        from openpyxl.utils import get_column_letter
+        start_col_letter = get_column_letter(start_col)
+        end_col_letter = get_column_letter(end_col)
+        cell_range = f"{start_col_letter}{start_row}:{end_col_letter}{end_row}"
+        
         # 应用数据条
-        cell_range = f"{worksheet.cell(row=start_row, column=start_col).coordinate}:{worksheet.cell(row=end_row, column=end_col).coordinate}"
         worksheet.conditional_formatting.add(cell_range, rule)
                 
     except Exception as e:
@@ -1250,10 +1261,11 @@ def apply_color_scale(worksheet, params):
                              end_type='max',
                              end_color='63BE7B')
         
-        # 创建单元格范围字符串
-        start_cell = worksheet.cell(row=start_row, column=start_col).coordinate
-        end_cell = worksheet.cell(row=end_row, column=end_col).coordinate
-        cell_range = f"{start_cell}:{end_cell}"
+        # 使用get_column_letter函数替代直接使用cell.coordinate
+        from openpyxl.utils import get_column_letter
+        start_cell_col = get_column_letter(start_col)
+        end_cell_col = get_column_letter(end_col)
+        cell_range = f"{start_cell_col}{start_row}:{end_cell_col}{end_row}"
         
         # 应用色阶到指定范围
         logging.info(f"Applying color scale with range: {cell_range}, start_row: {start_row}, end_row: {end_row}, start_col: {start_col}, end_col: {end_col}")  # Add logging
