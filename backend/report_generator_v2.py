@@ -44,11 +44,26 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
                 raise ValueError("必须提供 data_frame 或 input_file")
             # 读取输入文件
             input_path = input_file
-            df = pd.read_excel(input_path)
+            # 获取输入文件的所有工作表名称
+            xls = pd.ExcelFile(input_path)
+            sheet_names = xls.sheet_names
+            
+            # 读取所有工作表的数据
+            all_sheets_data = {}
+            for sheet_name in sheet_names:
+                all_sheets_data[sheet_name] = pd.read_excel(input_path, sheet_name=sheet_name)
+            
+            # 如果没有工作表，使用默认名称
+            if not sheet_names:
+                sheet_names = ['汇总报表']
+                all_sheets_data = {'汇总报表': pd.DataFrame()}
+            
             task.update_progress({'progress': 5, 'log': '读取输入文件'})
         else:
-            df = data_frame
-            
+            # 如果使用data_frame，则只有一个工作表
+            sheet_names = ['汇总报表']
+            all_sheets_data = {'汇总报表': data_frame}
+
         # 如果提供了输出目录，使用它；否则使用默认目录
         if output_dir:
             # 确保目录存在
@@ -80,356 +95,341 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
                 logging.error(f'读取变量文件失败: {e}')
 
         # 计算 SQL 查询的总数
-        total_queries = len(df)
+        total_queries = sum(len(df) for df in all_sheets_data.values())
 
         # 创建输出工作簿
         wb = Workbook()
-        summary_ws = wb.active
-        summary_ws.title = '汇总报表'
-
-         # 定义默认样式
-        default_font = Font(name='微软雅黑', size=12)
-        bold_font = Font(name='微软雅黑', size=12, bold=True)
-        thin_border = Border(left=Side(style=None), 
-                            right=Side(style=None), 
-                            top=Side(style=None), 
-                            bottom=Side(style=None))
+        # 删除默认创建的Sheet
+        default_sheet = wb.active
+        wb.remove(default_sheet)
         
-        # 处理每一行
-        summary_row_offset = 1
-        for index, row in df.iterrows():
-            if task.cancelled:  # 检查是否取消
-                raise Exception('Task cancelled')
-            db_name = row['db_name']
-            sql = row['output_sql']
-            format_rules = row.get('format', '')
-            transpose = row.get('transpose(Y/N)', '').strip().lower() == 'y'  # 检查是否需要转置
+        # 为每个工作表创建对应的汇总表并处理SQL查询
+        for sheet_name, df in all_sheets_data.items():
+            # 创建汇总表
+            summary_ws = wb.create_sheet(title=sheet_name)
             
-            # 创建临时工作表
-            temp_ws = wb.create_sheet(title=f'临时表_{index+1}')
+            # 定义默认样式
+            default_font = Font(name='微软雅黑', size=12)
+            bold_font = Font(name='微软雅黑', size=12, bold=True)
+            thin_border = Border(left=Side(style=None), 
+                                right=Side(style=None), 
+                                top=Side(style=None), 
+                                bottom=Side(style=None))
             
-            # 从Excel行中获取数据库配置
-            db_config = {
-                'host': row.get('db_host', DB_CONFIG['host']),
-                'port': int(row.get('db_port', DB_CONFIG['port'])),
-                'user': row.get('db_user', DB_CONFIG['user']),
-                'password': row.get('db_password', DB_CONFIG['password']),
-                'database': db_name  # 使用指定的数据库名
-            }
-
-            # 变量替换
-            if variables:
-              for key, value in variables.items():
-                sql = sql.replace('{' + key + '}', str(value))
-            task.update_progress({'progress':10, 'log':f'变量替换完成'})
+            # 处理每一行SQL查询
+            summary_row_offset = 1
+            pos_dict = {}  # 每个工作表有自己的位置字典
             
-            # 连接数据库并执行查询
-            connection = connect_db_with_config(db_config)
-            columns, data = execute_query(connection, sql)
-            # task.update_progress({'progress':20, 'log':f'第 {index + 1} 个 SQL 开始执行'}) # 连接数据库并执行查询后: 更新 20%
-            # 计算当前进度
-            completed_queries = index + 1
-            progress = 10 + int((((completed_queries-1)*3+1) / total_queries/3) * 50) # 假设 SQL 查询占 55% 的进度
-            task.update_progress({'progress': progress, 'log': f'第 {index + 1} 个 SQL 开始执行'})
-            if task.cancelled:  # 检查是否取消
-                logging.warning(f'Task cancelled after executing SQL {index + 1}')
-                raise Exception('Task cancelled')
-
-            # 转置处理
-            if transpose:
-                try:
-                    # 转置
-                    data_with_columns = [columns] + data  # 将标题行和数据合并
-                    data = list(map(list, zip(*data_with_columns)))  # 转置数据
-
-                    # 删除原始标题行，将第一行数据作为新的标题行
-                    columns = data[0]  # 将转置后的第一行作为新的标题行
-                    data_without_header = data[1:]  # 移除原始标题行
-
-                    # 重新合并新的标题行和数据
-                    data = data_without_header
-                    
-                except Exception as e:
-                    logging.error(f"转置处理时出错: {e}")
-            
-            # 写入临时工作表
-            temp_row_offset = 1
-            # 写入表头
-            for col_num, column in enumerate(columns, 1):
-                cell = temp_ws.cell(row=temp_row_offset, column=col_num, value=column)
-                cell.font = bold_font
-                cell.border = thin_border
+            for index, row in df.iterrows():
                 if task.cancelled:  # 检查是否取消
                     raise Exception('Task cancelled')
-            
-            # 写入数据
-            for data_row in data:
-                temp_row_offset += 1
-                for col_num, value in enumerate(data_row, 1):
-                    cell = temp_ws.cell(row=temp_row_offset, column=col_num, value=value)
-                    cell.font = default_font
+                
+                # 获取SQL查询信息
+                db_name = row['db_name']
+                sql = row['output_sql']
+                format_rules = row.get('format', '')
+                transpose = row.get('transpose(Y/N)', '').strip().lower() == 'y'  # 检查是否需要转置
+                
+                # 创建临时工作表，包含工作表名称
+                temp_ws = wb.create_sheet(title=f'临时表_{sheet_name}_{index+1}')
+                
+                # 从Excel行中获取数据库配置
+                db_config = {
+                    'host': row.get('db_host', DB_CONFIG['host']),
+                    'port': int(row.get('db_port', DB_CONFIG['port'])),
+                    'user': row.get('db_user', DB_CONFIG['user']),
+                    'password': row.get('db_password', DB_CONFIG['password']),
+                    'database': db_name  # 使用指定的数据库名
+                }
+
+                # 变量替换
+                if variables:
+                    for key, value in variables.items():
+                        sql = sql.replace('{' + key + '}', str(value))
+                
+                # 计算当前进度
+                sheet_index = list(all_sheets_data.keys()).index(sheet_name)
+                completed_queries = sum(len(df) for i, (s, df) in enumerate(all_sheets_data.items()) if i < sheet_index)
+                completed_queries += index + 1
+                progress = 10 + int((completed_queries / total_queries) * 55)
+                task.update_progress({'progress': progress, 'log': f'工作表 {sheet_name} 的第 {index + 1} 个 SQL 开始执行'})
+                
+                # 连接数据库并执行查询
+                connection = connect_db_with_config(db_config)
+                columns, data = execute_query(connection, sql)
+                
+                if task.cancelled:  # 检查是否取消
+                    logging.warning(f'Task cancelled after executing SQL {index + 1}')
+                    raise Exception('Task cancelled')
+
+                # 转置处理
+                if transpose:
+                    try:
+                        # 转置
+                        data_with_columns = [columns] + data  # 将标题行和数据合并
+                        data = list(map(list, zip(*data_with_columns)))  # 转置数据
+
+                        # 删除原始标题行，将第一行数据作为新的标题行
+                        columns = data[0]  # 将转置后的第一行作为新的标题行
+                        data_without_header = data[1:]  # 移除原始标题行
+
+                        # 重新合并新的标题行和数据
+                        data = data_without_header
+                        
+                    except Exception as e:
+                        logging.error(f"转置处理时出错: {e}")
+                
+                # 写入临时工作表
+                temp_row_offset = 1
+                # 写入表头
+                for col_num, column in enumerate(columns, 1):
+                    cell = temp_ws.cell(row=temp_row_offset, column=col_num, value=column)
+                    cell.font = bold_font
                     cell.border = thin_border
                     if task.cancelled:  # 检查是否取消
                         raise Exception('Task cancelled')
-                    
-            progress = 5 + int((((completed_queries-1)*3+2) / total_queries/3) * 55)
-            task.update_progress({'progress': progress, 'log': f'第 {index + 1} 个 SQL 应用样式'})
-            
-            # 应用自定义样式
-            if task.cancelled:  # 检查是否取消
-                raise Exception('Task cancelled')
-
-        # Calculate max_row across all temp_ws sheets
-        max_temp_row = 0
-        for sheet_name in wb.sheetnames:
-            if sheet_name.startswith('临时表'):
-                max_temp_row = max(max_temp_row, wb[sheet_name].max_row)
-
-        # Apply formatting rules with max_row_override
-        for index, row in df.iterrows():
-            format_rules = row.get('format', '')
-            if format_rules:
-                temp_ws = wb[f'临时表_{index+1}']
-                apply_format_rules(temp_ws, format_rules, max_row_override=max_temp_row)
-
-            # 初始化位置字典
-            if index == 0:
-                pos_dict = {}
-            
-            # 解析pos字段
-            pos = row.get('pos', '')
-            if pos:
-                try:
-                    # 解析pos格式 n-m
-                    pos_parts = pos.split('-')
-                    if len(pos_parts) != 2:
-                        raise ValueError('Invalid pos format')
+                
+                # 写入数据
+                for data_row in data:
+                    temp_row_offset += 1
+                    for col_num, value in enumerate(data_row, 1):
+                        cell = temp_ws.cell(row=temp_row_offset, column=col_num, value=value)
+                        cell.font = default_font
+                        cell.border = thin_border
+                        if task.cancelled:  # 检查是否取消
+                            raise Exception('Task cancelled')
+                
+                # 应用自定义样式
+                if format_rules:
+                    apply_format_rules(temp_ws, format_rules)
+                
+                # 更新进度
+                task.update_progress({'progress': progress, 'log': f'工作表 {sheet_name} 的第 {index + 1} 个 SQL 应用样式'})
+                
+                # 解析pos字段
+                pos = row.get('pos', '')
+                if pos:
+                    try:
+                        # 解析pos格式 n-m
+                        pos_parts = pos.split('-')
+                        if len(pos_parts) != 2:
+                            raise ValueError('Invalid pos format')
+                            
+                        pos_row = int(pos_parts[0])
+                        pos_col = int(pos_parts[1])
                         
-                    pos_row = int(pos_parts[0])
-                    pos_col = int(pos_parts[1])
-                    
-                    if pos_row <= 0 or pos_col <= 0:
-                        raise ValueError('Pos values must be positive integers')
-                        
-                    # 计算起始位置
-                    if pos_row == 1 and pos_col == 1:
-                        # 第一个表格
-                        start_row = 1
-                        start_col = 1
-                    elif pos_row == 1:
-                        # 同一行的表格
-                        start_row = 1
-                        if pos_col == 1:
+                        if pos_row <= 0 or pos_col <= 0:
+                            raise ValueError('Pos values must be positive integers')
+                            
+                        # 处理位置
+                        if pos_row == 1 and pos_col == 1:
+                            # 第一个表格，放在左上角
+                            start_row = 1
                             start_col = 1
                         else:
-                            # 找到同一行前m-1列的最大列
-                            max_col = 0
-                            for i in range(1, pos_col):
-                                key = f'1-{i}'
-                                if key in pos_dict:
-                                    max_col = max(max_col, pos_dict[key]['end_col'])
-                            start_col = max_col + 2  # 增加1列间隔
-                    else:
-                        if pos_col == 1:
-                            # 当m_number=1时
-                            # 寻找n-1的所有结果的最大行
-                            max_row = 0
-                            # 遍历所有以n-1开头的pos键
-                            for key in pos_dict.keys():
-                                if key.startswith(f'{pos_row-1}-'):
-                                    max_row = max(max_row, pos_dict[key]['end_row'])
-                            start_row = max_row + 2  # 增加1行间隔
-                            start_col = 1
-                        else:
-                            # 当m_number >= 2时
-                            # 找到n=pos_row且m=pos_col-1的结果
-                            prev_key = f'{pos_row}-{pos_col-1}'
-                            if prev_key in pos_dict:
-                                start_row = pos_dict[prev_key]['start_row']
-                                start_col = pos_dict[prev_key]['end_col'] + 2  # 增加1列间隔
-                            else:
-                                # 如果找不到前一个表格，使用默认位置
-                                start_row = summary_row_offset + 1  # 增加1行间隔
+                            if pos_col == 1:
+                                # 当m_number=1时
+                                # 寻找n-1的所有结果的最大行
+                                max_row = 0
+                                # 遍历所有以n-1开头的pos键
+                                for key in pos_dict.keys():
+                                    if key.startswith(f'{pos_row-1}-'):
+                                        max_row = max(max_row, pos_dict[key]['end_row'])
+                                start_row = max_row + 2  # 增加1行间隔
                                 start_col = 1
-                    
-                    # 将当前表格的位置信息存入字典
-                    pos_dict[f'{pos_row}-{pos_col}'] = {
-                        'start_row': start_row,
-                        'start_col': start_col,
-                        'end_row': start_row + temp_ws.max_row - 1,
-                        'end_col': start_col + temp_ws.max_column - 1
-                    }
-                    
-                    # 增加表格间的空行
-                    summary_row_offset += 1
+                            else:
+                                # 当m_number >= 2时
+                                # 找到n=pos_row且m=pos_col-1的结果
+                                prev_key = f'{pos_row}-{pos_col-1}'
+                                if prev_key in pos_dict:
+                                    start_row = pos_dict[prev_key]['start_row']
+                                    start_col = pos_dict[prev_key]['end_col'] + 2  # 增加1列间隔
+                                else:
+                                    # 如果找不到前一个表格，使用默认位置
+                                    start_row = summary_row_offset + 1  # 增加1行间隔
+                                    start_col = 1
                         
-                except Exception as e:
-                    logging.warning(f'Invalid pos value "{pos}": {e}. Using default position.')
+                        # 将当前表格的位置信息存入字典
+                        pos_dict[f'{pos_row}-{pos_col}'] = {
+                            'start_row': start_row,
+                            'start_col': start_col,
+                            'end_row': start_row + temp_ws.max_row - 1,
+                            'end_col': start_col + temp_ws.max_column - 1
+                        }
+                        
+                        # 增加表格间的空行
+                        summary_row_offset += 1
+                            
+                    except Exception as e:
+                        logging.warning(f'Invalid pos value "{pos}": {e}. Using default position.')
+                        start_row = summary_row_offset
+                        start_col = 1
+                else:
+                    # 没有pos字段，使用默认顺序
                     start_row = summary_row_offset
                     start_col = 1
-            else:
-                # 没有pos字段，使用默认顺序
-                start_row = summary_row_offset
-                start_col = 1
-            
-            # 开始写入汇总表之前，更新进度
-            progress = 5 + int((((completed_queries-1)*3+3) / total_queries/3) * 55)
-            task.update_progress({'progress': progress, 'log': f'第 {index + 1} 个 SQL 结果写入汇总表'})
-
-            # 保存临时表
-            # temp_file = os.path.join(UPLOAD_FOLDER, f'tmp.xlsx')
-            # wb.save(temp_file)
-            # logging.info(f'临时表保存路径: {os.path.abspath(temp_file)}')
-            
-            # 将临时表所有数据合并到汇总表，包括格式
-            max_row = temp_ws.max_row
-            max_col = temp_ws.max_column
-            
-            for row_idx, row in enumerate(temp_ws.iter_rows(min_row=1, max_row=max_row,
-                                       min_col=1, max_col=max_col), start=start_row):
-                for col_idx, cell in enumerate(row, start=start_col):
-                    new_cell = summary_ws.cell(row=row_idx, column=col_idx, value=cell.value)
-                    # 复制样式
-                    if cell.has_style:
-                        new_cell.font = Font(
-                            name=cell.font.name,
-                            size=cell.font.size,
-                            bold=cell.font.bold,
-                            italic=cell.font.italic,
-                            vertAlign=cell.font.vertAlign,
-                            underline=cell.font.underline,
-                            strike=cell.font.strike,
-                            color=cell.font.color
-                        )
-                        new_cell.border = Border(
-                            left=cell.border.left,
-                            right=cell.border.right,
-                            top=cell.border.top,
-                            bottom=cell.border.bottom,
-                            diagonal=cell.border.diagonal,
-                            diagonal_direction=cell.border.diagonal_direction,
-                            outline=cell.border.outline,
-                            vertical=cell.border.vertical,
-                            horizontal=cell.border.horizontal
-                        )
-                        new_cell.fill = PatternFill(
-                            fill_type=cell.fill.fill_type,
-                            start_color=cell.fill.start_color,
-                            end_color=cell.fill.end_color
-                        )
-                        new_cell.number_format = cell.number_format
-                        new_cell.protection = Protection(
-                            locked=cell.protection.locked,
-                            hidden=cell.protection.hidden
-                        )
-                        new_cell.alignment = Alignment(
-                            horizontal=cell.alignment.horizontal,
-                            vertical=cell.alignment.vertical,
-                            text_rotation=cell.alignment.text_rotation,
-                            wrap_text=cell.alignment.wrap_text,
-                            shrink_to_fit=cell.alignment.shrink_to_fit,
-                            indent=cell.alignment.indent
-                        )
-                    
-                    # 复制条件格式
-                    for cf in temp_ws.conditional_formatting:
-                        # 获取原始条件格式的范围
-                        orig_range = list(cf.cells.ranges)[0]
-                        
-                        # 计算原始范围的列偏移量
-                        orig_start_col = orig_range.min_col
-                        orig_end_col = orig_range.max_col
-                        
-                        # 计算相对范围（保持与原始数据的相对位置关系）
-                        relative_start_row = orig_range.min_row  # 保持原始的相对起始行
-                        relative_end_row = orig_range.max_row    # 保持原始的相对结束行
-                        relative_rows = relative_end_row - relative_start_row  # 计算范围跨度
-
-                        # 计算新范围的起始和结束坐标
-                        new_start_row = start_row + (relative_start_row - 1)  # -1 是因为我们要保持相对位置
-                        new_end_row = new_start_row + relative_rows
-                        new_start_col = start_col + orig_range.min_col - 1
-                        new_end_col = start_col + orig_range.max_col - 1
-                        
-                        # 确保列索引不超过Excel最大列数限制
-                        if new_end_col > 16384:  # Excel最大列数为16384
-                            new_end_col = 16384
-                            new_start_col = new_end_col - (orig_end_col - orig_start_col + 1) + 1
-                            if new_start_col < 1:
-                                new_start_col = 1
-                        
-                        # 创建新的范围字符串，使用get_column_letter函数替代直接使用cell.coordinate
-                        from openpyxl.utils import get_column_letter
-                        new_start_col_letter = get_column_letter(new_start_col)
-                        new_end_col_letter = get_column_letter(new_end_col)
-                        new_range = f"{new_start_col_letter}{new_start_row}:{new_end_col_letter}{new_end_row}"
-                        
-                        # 应用条件格式到指定范围
-                        summary_ws.conditional_formatting.add(new_range, cf.rules[0])
-                summary_row_offset += 1
-            
-            summary_row_offset += 1  # 每个报表之间空一行
-        
-         # 完成数据写入,开始应用样式之前, 更新进度
-        task.update_progress({'progress':70, 'log':'完成数据写入,开始应用样式'})
-
-        # 完成数据插入后：新增标题行和首列
-        # 保存所有条件格式规则及其范围
-        saved_formats = []
-        for cf in summary_ws.conditional_formatting:
-            for range_obj in cf.cells.ranges:
-                # 保存原始范围的行列信息和相对于数据起始位置的偏移
-                original_start_row = range_obj.min_row - start_row  # 计算相对起始行
-                original_end_row = range_obj.max_row - start_row    # 计算相对结束行
-                original_start_col = range_obj.min_col - start_col  # 计算相对起始列
-                original_end_col = range_obj.max_col - start_col    # 计算相对结束列
                 
-                saved_formats.append((
-                    cf.rules[0],
-                    original_start_row,  # 保存相对位置
-                    original_end_row,
-                    original_start_col,
-                    original_end_col,
-                    start_row,          # 保存原始起始位置
-                    start_col
-                ))
+                # 更新进度
+                task.update_progress({'progress': progress, 'log': f'工作表 {sheet_name} 的第 {index + 1} 个 SQL 结果写入汇总表'})
+                
+                # 将临时表所有数据合并到汇总表，包括格式
+                max_row = temp_ws.max_row
+                max_col = temp_ws.max_column
+                
+                for row_idx, row in enumerate(temp_ws.iter_rows(min_row=1, max_row=max_row,
+                                           min_col=1, max_col=max_col), start=start_row):
+                    for col_idx, cell in enumerate(row, start=start_col):
+                        new_cell = summary_ws.cell(row=row_idx, column=col_idx, value=cell.value)
+                        # 复制样式
+                        if cell.has_style:
+                            new_cell.font = Font(
+                                name=cell.font.name,
+                                size=cell.font.size,
+                                bold=cell.font.bold,
+                                italic=cell.font.italic,
+                                vertAlign=cell.font.vertAlign,
+                                underline=cell.font.underline,
+                                strike=cell.font.strike,
+                                color=cell.font.color
+                            )
+                            new_cell.border = Border(
+                                left=cell.border.left,
+                                right=cell.border.right,
+                                top=cell.border.top,
+                                bottom=cell.border.bottom,
+                                diagonal=cell.border.diagonal,
+                                diagonal_direction=cell.border.diagonal_direction,
+                                outline=cell.border.outline,
+                                vertical=cell.border.vertical,
+                                horizontal=cell.border.horizontal
+                            )
+                            new_cell.fill = PatternFill(
+                                fill_type=cell.fill.fill_type,
+                                start_color=cell.fill.start_color,
+                                end_color=cell.fill.end_color
+                            )
+                            new_cell.number_format = cell.number_format
+                            new_cell.protection = Protection(
+                                locked=cell.protection.locked,
+                                hidden=cell.protection.hidden
+                            )
+                            new_cell.alignment = Alignment(
+                                horizontal=cell.alignment.horizontal,
+                                vertical=cell.alignment.vertical,
+                                text_rotation=cell.alignment.text_rotation,
+                                wrap_text=cell.alignment.wrap_text,
+                                shrink_to_fit=cell.alignment.shrink_to_fit,
+                                indent=cell.alignment.indent
+                            )
+                        
+                        # 复制条件格式
+                        for cf in temp_ws.conditional_formatting:
+                            # 获取原始条件格式的范围
+                            orig_range = list(cf.cells.ranges)[0]
+                            
+                            # 计算原始范围的列偏移量
+                            orig_start_col = orig_range.min_col
+                            orig_end_col = orig_range.max_col
+                            
+                            # 计算相对范围（保持与原始数据的相对位置关系）
+                            relative_start_row = orig_range.min_row  # 保持原始的相对起始行
+                            relative_end_row = orig_range.max_row    # 保持原始的相对结束行
+                            relative_rows = relative_end_row - relative_start_row  # 计算范围跨度
 
-        # 清除现有的条件格式
-        summary_ws.conditional_formatting = type(summary_ws.conditional_formatting)()
-
-        # 插入新行和列
-        summary_ws.insert_rows(1)
-        summary_ws.insert_cols(1)
-
-        # 重新应用条件格式，更新范围
-        for rule, rel_min_row, rel_max_row, rel_min_col, rel_max_col, orig_start_row, orig_start_col in saved_formats:
-            # 计算新的范围坐标，保持相对位置关系
-            new_start_row = orig_start_row + rel_min_row + 1  # +1 因为插入了一行
-            new_end_row = orig_start_row + rel_max_row + 1
-            new_start_col = orig_start_col + rel_min_col + 1  # +1 因为插入了一列
-            new_end_col = orig_start_col + rel_max_col + 1
+                            # 计算新范围的起始和结束坐标
+                            new_start_row = start_row + (relative_start_row - 1)  # -1 是因为我们要保持相对位置
+                            new_end_row = new_start_row + relative_rows
+                            new_start_col = start_col + orig_range.min_col - 1
+                            new_end_col = start_col + orig_range.max_col - 1
+                            
+                            # 确保列索引不超过Excel最大列数限制
+                            if new_end_col > 16384:  # Excel最大列数为16384
+                                new_end_col = 16384
+                                new_start_col = new_end_col - (orig_end_col - orig_start_col + 1) + 1
+                                if new_start_col < 1:
+                                    new_start_col = 1
+                            
+                            # 创建新的范围字符串，使用get_column_letter函数替代直接使用cell.coordinate
+                            from openpyxl.utils import get_column_letter
+                            new_start_col_letter = get_column_letter(new_start_col)
+                            new_end_col_letter = get_column_letter(new_end_col)
+                            new_range = f"{new_start_col_letter}{new_start_row}:{new_end_col_letter}{new_end_row}"
+                            
+                            # 应用条件格式到指定范围
+                            summary_ws.conditional_formatting.add(new_range, cf.rules[0])
+                    summary_row_offset += 1
+                
+                summary_row_offset += 1  # 每个报表之间空一行
             
-            # 使用get_column_letter函数创建新的范围字符串
+            # 完成数据写入,开始应用样式之前, 更新进度
+            task.update_progress({'progress':70, 'log':f'工作表 {sheet_name} 完成数据写入,开始应用样式'})
+
+            # 应用格式规则到每个临时表
+            for index, row in df.iterrows():
+                format_rules = row.get('format', '')
+                if format_rules:
+                    temp_ws_name = f'临时表_{sheet_name}_{index+1}'
+                    if temp_ws_name in wb.sheetnames:
+                        temp_ws = wb[temp_ws_name]
+                        apply_format_rules(temp_ws, format_rules)
+                        logging.info(f'应用格式规则到临时表: {temp_ws_name}')
+
+            # 完成数据插入后：新增标题行和首列
+            # 保存所有条件格式规则及其范围
+            saved_formats = []
+            for cf in summary_ws.conditional_formatting:
+                for range_obj in cf.cells.ranges:
+                    # 保存原始范围的行列信息和相对于数据起始位置的偏移
+                    original_start_row = range_obj.min_row - start_row  # 计算相对起始行
+                    original_end_row = range_obj.max_row - start_row    # 计算相对结束行
+                    original_start_col = range_obj.min_col - start_col  # 计算相对起始列
+                    original_end_col = range_obj.max_col - start_col    # 计算相对结束列
+                    
+                    saved_formats.append((
+                        cf.rules[0],
+                        original_start_row,  # 保存相对位置
+                        original_end_row,
+                        original_start_col,
+                        original_end_col,
+                        start_row,          # 保存原始起始位置
+                        start_col
+                    ))
+
+            # 清除现有的条件格式
+            summary_ws.conditional_formatting = type(summary_ws.conditional_formatting)()
+
+            # 插入新行和列
+            summary_ws.insert_rows(1)
+            summary_ws.insert_cols(1)
+
+            # 重新应用条件格式，更新范围
+            for rule, rel_min_row, rel_max_row, rel_min_col, rel_max_col, orig_start_row, orig_start_col in saved_formats:
+                # 计算新的范围坐标，保持相对位置关系
+                new_start_row = orig_start_row + rel_min_row + 1  # +1 因为插入了一行
+                new_end_row = orig_start_row + rel_max_row + 1
+                new_start_col = orig_start_col + rel_min_col + 1  # +1 因为插入了一列
+                new_end_col = orig_start_col + rel_max_col + 1
+                
+                # 使用get_column_letter函数创建新的范围字符串
+                from openpyxl.utils import get_column_letter
+                start_col_letter = get_column_letter(new_start_col)
+                end_col_letter = get_column_letter(new_end_col)
+                new_range = f"{start_col_letter}{new_start_row}:{end_col_letter}{new_end_row}"
+                
+                # 应用更新后的条件格式
+                summary_ws.conditional_formatting.add(new_range, rule)
+            
+            # 完成样式和条件格式写入后, 更新进度
+            task.update_progress({'progress':80, 'log':f'工作表 {sheet_name} 完成样式和条件格式写入'})
+
+            # 设置第一行的列宽为3，其他列宽为13
             from openpyxl.utils import get_column_letter
-            start_col_letter = get_column_letter(new_start_col)
-            end_col_letter = get_column_letter(new_end_col)
-            new_range = f"{start_col_letter}{new_start_row}:{end_col_letter}{new_end_row}"
-            
-            # 应用更新后的条件格式
-            summary_ws.conditional_formatting.add(new_range, rule)
-        
-        # 完成样式和条件格式写入后, 更新进度
-        task.update_progress({'progress':80, 'log':'完成样式和条件格式写入'})
-
-
-        # 设置第一行的列宽为3，其他列宽为13
-        from openpyxl.utils import get_column_letter
-        for col in range(1, summary_ws.max_column + 1):
-            col_letter = get_column_letter(col)
-            if col == 1:
-                summary_ws.column_dimensions[col_letter].width = 3  # 第一列设置为3
-            else:
-                summary_ws.column_dimensions[col_letter].width = 13  # 其他列设置为13
+            for col in range(1, summary_ws.max_column + 1):
+                col_letter = get_column_letter(col)
+                if col == 1:
+                    summary_ws.column_dimensions[col_letter].width = 3  # 第一列设置为3
+                else:
+                    summary_ws.column_dimensions[col_letter].width = 13  # 其他列设置为13
         
         # 完成所有数据插入,新增标题和首列之前, 更新进度
         task.update_progress({'progress':90, 'log':'完成所有数据插入,调整样式'})
@@ -464,7 +464,7 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
         output_file = get_unique_filename(output_dir, output_file)
 
         # 删除所有临时表
-        temp_sheets = [sheet for sheet in wb.sheetnames if sheet.startswith('临时表')]
+        temp_sheets = [sheet for sheet in wb.sheetnames if '临时表_' in sheet]
         for sheet_name in temp_sheets:
             wb.remove(wb[sheet_name])
     
@@ -592,10 +592,10 @@ def apply_alignment(worksheet, params):
                 end_row = max_row_override if max_row_override is not None else worksheet.max_row
             else:
                 end_row = int(rows[1])
-            if end_row <= 0:
-                raise ValueError('End row must be a positive integer')
-            if start_row > end_row:
-                raise ValueError(f'Start row ({start_row}) must be less than or equal to end row ({end_row})')
+                if end_row <= 0:
+                    raise ValueError('End row must be a positive integer')
+                if start_row > end_row:
+                    raise ValueError(f'Start row ({start_row}) must be less than or equal to end row ({end_row})')
         except ValueError as e:
             raise ValueError(f'Row numbers must be integers or "max". Error: {e}')
             
