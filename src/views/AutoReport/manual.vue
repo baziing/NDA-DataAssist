@@ -336,29 +336,23 @@ export default {
         return
       }
 
-      // 获取当前时间戳
-      const now = new Date()
-      const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
-
       // 构造下载链接，使用与当前网站相同的协议（HTTP或HTTPS）
       // 重要提示：如果您希望从同一网络中的其他计算机访问此服务，请将 "localhost" 替换为运行此服务的计算机的 IP 地址或主机名。
       const protocol = window.location.protocol // 获取当前网站的协议 (http: 或 https:)
+
+      // 使用与taskManagement.vue相同的下载方式，不指定文件名（让服务端处理）
       const downloadUrl = `${protocol}//${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/download/${this.outputFile.replace('output/', '')}`
 
-      // 创建一个隐藏的 <a> 元素
-      const link = document.createElement('a')
-      link.href = downloadUrl
-      link.style.display = 'none'
-      link.download = `${this.downloadFilename.replace('.xlsx', '')}_${timestamp}.xlsx` // 设置下载文件名
-      document.body.appendChild(link)
-
-      // 模拟点击，触发下载
-      link.click()
-
-      // 移除 <a> 元素
-      document.body.removeChild(link)
-      this.downloadProgress = 100
-      this.downloadStatus = 'success'
+      // 在新窗口中打开下载链接
+      try {
+        window.open(downloadUrl, '_blank')
+        this.downloadProgress = 100
+        this.downloadStatus = 'success'
+      } catch (error) {
+        console.error('下载失败:', error)
+        this.$message.error(`下载失败: ${error.message || '未知错误'}`)
+        this.downloadStatus = 'exception'
+      }
     },
     handleReset() {
       this.uploadProgress = 0
