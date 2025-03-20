@@ -99,7 +99,7 @@ export default {
       uploadedFilename: null,
       outputFile: null,
       uploadButtonDisabled: false, // 初始时启用上传模板按钮
-      skipButtonDisabled: true, // 初始禁用“SKIP”和“上传”
+      skipButtonDisabled: true, // 初始禁用"SKIP"和"上传"
       startButtonDisabled: true, // 初始时禁用开始按钮
       downloadButtonDisabled: true, // 初始时禁用下载按钮
       isExecuting: false,
@@ -166,8 +166,8 @@ export default {
           this.fileSize = (file.raw.size / 1024).toFixed(2) + ' KB'
           this.file = file // 将 file 对象赋值给 this.file
           this.filename = data.filename // 保存上传后返回的filename
-          this.activeNames = ['1', '2', '5'] // 展开“模板信息”和“导入变量”
-          this.skipButtonDisabled = false // 启用“SKIP”和“上传”按钮
+          this.activeNames = ['1', '2', '5'] // 展开"模板信息"和"导入变量"
+          this.skipButtonDisabled = false // 启用"SKIP"和"上传"按钮
           this.executionLog = '' // 清空执行日志
         })
         .catch(error => {
@@ -175,7 +175,7 @@ export default {
           this.uploadStatus = 'exception'
           this.$message.error(error.message)
           this.uploadProgress = 0 // 重置进度条
-          this.skipButtonDisabled = true // 禁用“SKIP”
+          this.skipButtonDisabled = true // 禁用"SKIP"
           this.executionLog = '' // 清空执行日志
         })
     },
@@ -184,7 +184,7 @@ export default {
       this.uploadVarProgress = 0
       this.$forceUpdate()
       this.startButtonDisabled = false // 上传变量后启用开始按钮
-      this.activeNames = ['1', '2', '5', '6', '3'] // 展开“变量内容”和“执行任务”
+      this.activeNames = ['1', '2', '5', '6', '3'] // 展开"变量内容"和"执行任务"
       console.log('变量文件已选择:', file)
 
       const formData = new FormData()
@@ -217,7 +217,7 @@ export default {
           console.error('Error:', error)
           this.uploadVarStatus = 'exception'
           this.$message.error(error.message) // 显示错误信息
-          this.startButtonDisabled = true // 禁用“执行任务”
+          this.startButtonDisabled = true // 禁用"执行任务"
           this.variables = [] // 清空变量
         })
     },
@@ -229,8 +229,8 @@ export default {
       this.showVariables = false
       this.uploadVarProgress = 0
       this.uploadVarStatus = null
-      this.startButtonDisabled = false // 点击“SKIP”后启用开始按钮
-      this.activeNames = ['1', '2', '5', '6', '3'] // 展开“变量内容”和“执行任务”
+      this.startButtonDisabled = false // 点击"SKIP"后启用开始按钮
+      this.activeNames = ['1', '2', '5', '6', '3'] // 展开"变量内容"和"执行任务"
       this.variables_filename = null
       this.variables = []
     },
@@ -290,7 +290,7 @@ export default {
                   this.uploadButtonDisabled = true
                   this.skipButtonDisabled = true
                   this.isExecuting = false
-                  this.activeNames = ['1', '2', '5', '6', '3', '4'] // 展开“下载结果”
+                  this.activeNames = ['1', '2', '5', '6', '3', '4'] // 展开"下载结果"
                   clearInterval(intervalId) // 成功后清除 interval
                 } else if (progressData.status['status'] === 'failed') {
                   this.executionStatus = 'exception'
@@ -330,7 +330,17 @@ export default {
       // 构造下载链接
       // 重要提示：如果您希望从同一网络中的其他计算机访问此服务，请将 "localhost" 替换为运行此服务的计算机的 IP 地址或主机名。
       const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http'
-      const downloadUrl = `${protocol}://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/download/${this.outputFile.replace('output/', '')}`
+
+      // 简单处理：如果路径中包含output/，则移除它
+      let downloadPath = this.outputFile
+      if (downloadPath.includes('output/')) {
+        downloadPath = downloadPath.replace('output/', '')
+      }
+      if (downloadPath.includes('output\\')) {
+        downloadPath = downloadPath.replace('output\\', '')
+      }
+      const downloadUrl = `${protocol}://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/download/${downloadPath}`
+      console.log('下载URL:', downloadUrl, '原始outputFile:', this.outputFile)
 
       // 创建一个隐藏的 <a> 元素
       const link = document.createElement('a')
