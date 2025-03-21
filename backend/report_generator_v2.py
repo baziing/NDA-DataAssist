@@ -13,6 +13,8 @@ from datetime import datetime, timedelta
 from openpyxl.formatting.rule import DataBarRule, ColorScaleRule
 from openpyxl.utils import get_column_letter
 from backend.file_name_formatter import format_filename, get_unique_filename
+import shutil
+import re
 
 UPLOAD_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'tmp'))
 
@@ -127,6 +129,27 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
                 # 获取SQL查询信息
                 db_name = row['db_name']
                 sql = row['output_sql']
+                
+                # 检测是否存在sql1, sql2等字段并进行拼接
+                sql_index = 1
+                sql_parts = [sql]  # 用于记录日志的列表
+                while True:
+                    sql_field = f'sql{sql_index}'
+                    if sql_field in row and row[sql_field] and isinstance(row[sql_field], str):
+                        # 添加一个空格作为分隔符，避免SQL语句连接时出现语法错误
+                        if not sql.endswith(' ') and not row[sql_field].startswith(' '):
+                            sql += ' '
+                        sql += row[sql_field]
+                        sql_parts.append(row[sql_field])
+                        sql_index += 1
+                    else:
+                        break
+                
+                # 如果进行了SQL拼接，记录日志
+                if len(sql_parts) > 1:
+                    total_length = len(sql)
+                    logging.info(f'检测到多个SQL片段，已进行拼接: {len(sql_parts)} 个片段，总长度: {total_length} 字符')
+                
                 format_rules = row.get('format', '')
                 transpose = row.get('transpose(Y/N)', '').strip().lower() == 'y'  # 检查是否需要转置
                 
@@ -156,7 +179,29 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
                 
                 # 连接数据库并执行查询
                 connection = connect_db_with_config(db_config)
-                columns, data = execute_query(connection, sql)
+                try:
+                    columns, data = execute_query(connection, sql)
+                except Exception as e:
+                    # 出错时保存完整SQL到日志
+                    error_message = f'SQL执行错误: {str(e)}'
+                    task.update_progress({'progress': progress, 'log': error_message})
+                    logging.error(error_message)
+                    
+                    # 将完整SQL保存到单独的日志文件中
+                    error_log_dir = os.path.join('logs', 'sql_errors')
+                    os.makedirs(error_log_dir, exist_ok=True)
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    error_log_file = os.path.join(error_log_dir, f'sql_error_{timestamp}.sql')
+                    
+                    with open(error_log_file, 'w', encoding='utf-8') as f:
+                        f.write(f"-- 错误信息: {str(e)}\n")
+                        f.write(f"-- 工作表: {sheet_name}, 行: {index + 1}\n")
+                        f.write(f"-- SQL长度: {len(sql)} 字符\n")
+                        f.write(f"-- 时间: {timestamp}\n\n")
+                        f.write(sql)
+                    
+                    logging.error(f'完整SQL已保存到: {error_log_file}')
+                    raise Exception(f'SQL执行错误: {str(e)}，完整SQL已保存到日志')
                 
                 if task.cancelled:  # 检查是否取消
                     logging.warning(f'Task cancelled after executing SQL {index + 1}')
