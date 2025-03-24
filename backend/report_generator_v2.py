@@ -52,8 +52,39 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
             
             # 读取所有工作表的数据
             all_sheets_data = {}
+            setting_info = {}  # 新增：用于存储setting信息
+            
+            # 先检查是否存在setting工作表
+            setting_sheet = None
             for sheet_name in sheet_names:
-                all_sheets_data[sheet_name] = pd.read_excel(input_path, sheet_name=sheet_name)
+                if '{setting}' in sheet_name.lower():
+                    setting_sheet = sheet_name
+                    break
+            
+            # 读取setting工作表
+            if setting_sheet:
+                try:
+                    setting_df = pd.read_excel(input_path, sheet_name=setting_sheet)
+                    # 转换为小写以支持大小写不敏感
+                    setting_df.columns = setting_df.columns.str.lower()
+                    
+                    # 检查必要的列是否存在
+                    required_columns = ['fun', 'title', 'config']
+                    if all(col in setting_df.columns for col in required_columns):
+                        for _, row in setting_df.iterrows():
+                            fun = str(row['fun']).strip()
+                            title = str(row['title']).strip()
+                            config = str(row['config']).strip() if pd.notna(row['config']) else ''
+                            
+                            if fun == '冻结' and title:
+                                setting_info[title] = config
+                except Exception as e:
+                    logging.warning(f'处理setting工作表时出错: {e}')
+            
+            # 读取其他工作表
+            for sheet_name in sheet_names:
+                if sheet_name != setting_sheet:  # 跳过setting工作表
+                    all_sheets_data[sheet_name] = pd.read_excel(input_path, sheet_name=sheet_name)
             
             # 如果没有工作表，使用默认名称
             if not sheet_names:
@@ -512,6 +543,33 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
         temp_sheets = [sheet for sheet in wb.sheetnames if '临时表_' in sheet]
         for sheet_name in temp_sheets:
             wb.remove(wb[sheet_name])
+    
+        # 在保存文件之前应用冻结设置
+        for sheet_name, freeze_info in setting_info.items():
+            try:
+                if sheet_name in wb.sheetnames:
+                    ws = wb[sheet_name]
+                    if not freeze_info:  # 如果config为空，跳过
+                        continue
+                        
+                    # 处理类似"B2"这样的格式
+                    if len(freeze_info) >= 2 and freeze_info[0].isalpha() and freeze_info[1:].isdigit():
+                        col_letter = ''.join(c for c in freeze_info if c.isalpha())
+                        row_num = int(''.join(c for c in freeze_info if c.isdigit()))
+                        ws.freeze_panes = f'{col_letter}{row_num}'
+                    # 处理类似"B"这样的格式
+                    elif freeze_info.isalpha():
+                        ws.freeze_panes = f'{freeze_info.upper()}1'
+                    # 处理纯数字格式
+                    elif freeze_info.isdigit():
+                        row_num = int(freeze_info)
+                        ws.freeze_panes = f'A{row_num}'
+                    # 处理类似"c2"这样的格式（保持原有逻辑的兼容性）
+                    elif freeze_info.startswith('c') and freeze_info[1:].isdigit():
+                        col_num = int(freeze_info[1:])
+                        ws.freeze_panes = f'{get_column_letter(col_num)}2'
+            except Exception as e:
+                logging.warning(f'应用冻结时出错: sheet_name={sheet_name}, config={freeze_info}, error={e}')
     
         # 保存文件
         output_path = os.path.join(output_dir, output_file)
