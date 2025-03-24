@@ -27,3 +27,5 @@ yarn.lock
 *.xlsx
 *.pyc
 backend/tasks.json
+*.sql
+backend/report_generator.py
