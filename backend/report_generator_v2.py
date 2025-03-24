@@ -40,6 +40,9 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
     logging.info(f'generate_report called with task: {task}')
     output_path = None  # 初始化 output_path
     try:
+        # 初始化setting_info（移到更高的作用域）
+        setting_info = {}  # 用于存储setting信息
+        
         # 优先使用 data_frame，如果没有，再尝试从 input_file 读取
         if data_frame is None:
             if input_file is None:
@@ -52,34 +55,35 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
             
             # 读取所有工作表的数据
             all_sheets_data = {}
-            setting_info = {}  # 新增：用于存储setting信息
             
-            # 先检查是否存在setting工作表
-            setting_sheet = None
-            for sheet_name in sheet_names:
-                if '{setting}' in sheet_name.lower():
-                    setting_sheet = sheet_name
-                    break
-            
-            # 读取setting工作表
-            if setting_sheet:
-                try:
-                    setting_df = pd.read_excel(input_path, sheet_name=setting_sheet)
-                    # 转换为小写以支持大小写不敏感
-                    setting_df.columns = setting_df.columns.str.lower()
-                    
-                    # 检查必要的列是否存在
-                    required_columns = ['fun', 'title', 'config']
-                    if all(col in setting_df.columns for col in required_columns):
-                        for _, row in setting_df.iterrows():
-                            fun = str(row['fun']).strip()
-                            title = str(row['title']).strip()
-                            config = str(row['config']).strip() if pd.notna(row['config']) else ''
-                            
-                            if fun == '冻结' and title:
-                                setting_info[title] = config
-                except Exception as e:
-                    logging.warning(f'处理setting工作表时出错: {e}')
+            # 如果是手动上传的Excel文件，从文件中读取setting
+            if input_file:
+                # 先检查是否存在setting工作表
+                setting_sheet = None
+                for sheet_name in sheet_names:
+                    if '{setting}' in sheet_name.lower():
+                        setting_sheet = sheet_name
+                        break
+                
+                # 读取setting工作表
+                if setting_sheet:
+                    try:
+                        setting_df = pd.read_excel(input_path, sheet_name=setting_sheet)
+                        # 转换为小写以支持大小写不敏感
+                        setting_df.columns = setting_df.columns.str.lower()
+                        
+                        # 检查必要的列是否存在
+                        required_columns = ['fun', 'title', 'config']
+                        if all(col in setting_df.columns for col in required_columns):
+                            for _, row in setting_df.iterrows():
+                                fun = str(row['fun']).strip()
+                                title = str(row['title']).strip()
+                                config = str(row['config']).strip() if pd.notna(row['config']) else ''
+                                
+                                if fun == '冻结' and title:
+                                    setting_info[title] = config
+                    except Exception as e:
+                        logging.warning(f'处理setting工作表时出错: {e}')
             
             # 读取其他工作表
             for sheet_name in sheet_names:
@@ -96,6 +100,26 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
             # 如果使用data_frame，则只有一个工作表
             sheet_names = ['汇总报表']
             all_sheets_data = {'汇总报表': data_frame}
+            
+            # 从task_info中读取setting配置
+            try:
+                if hasattr(task_info, 'settings') and task_info['settings']:
+                    settings_str = task_info['settings']
+                    if isinstance(settings_str, str):
+                        import json
+                        settings = json.loads(settings_str)
+                    else:
+                        settings = settings_str
+                        
+                    if isinstance(settings, dict) and 'freeze' in settings:
+                        for item in settings['freeze']:
+                            if isinstance(item, dict) and 'title' in item and 'config' in item:
+                                title = str(item['title']).strip()
+                                config = str(item['config']).strip() if item['config'] else ''
+                                if title:
+                                    setting_info[title] = config
+            except Exception as e:
+                logging.warning(f'处理数据库setting配置时出错: {e}')
 
         # 如果提供了输出目录，使用它；否则使用默认目录
         if output_dir:

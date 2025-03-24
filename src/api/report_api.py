@@ -10,6 +10,7 @@ import logging
 from datetime import datetime
 import pandas as pd
 import traceback
+import json
 
 from dotenv import load_dotenv
 from pathlib import Path
@@ -214,6 +215,46 @@ def create_task_api():
             if not excel_result['is_valid']:
                 return jsonify({"message": f"读取 Excel 文件失败: {excel_result['message']}"}), 500
             sql_list = excel_result['sql_list']
+            
+            # 读取setting工作表的配置
+            settings = {}
+            try:
+                xls = pd.ExcelFile(file_path)
+                setting_sheet = None
+                
+                # 查找setting工作表
+                for sheet_name in xls.sheet_names:
+                    if '{setting}' in sheet_name.lower():
+                        setting_sheet = sheet_name
+                        break
+                
+                if setting_sheet:
+                    setting_df = pd.read_excel(file_path, sheet_name=setting_sheet)
+                    setting_df.columns = setting_df.columns.str.lower()
+                    
+                    # 检查必要的列是否存在
+                    required_columns = ['fun', 'title', 'config']
+                    if all(col in setting_df.columns for col in required_columns):
+                        # 处理冻结功能
+                        freeze_settings = []
+                        for _, row in setting_df.iterrows():
+                            fun = str(row['fun']).strip()
+                            title = str(row['title']).strip()
+                            config = str(row['config']).strip() if pd.notna(row['config']) else ''
+                            
+                            if fun == '冻结' and title:
+                                freeze_settings.append({
+                                    'title': title,
+                                    'config': config
+                                })
+                        
+                        if freeze_settings:
+                            settings['freeze'] = freeze_settings
+                            
+            except Exception as e:
+                logging.warning(f"处理setting工作表时出错: {e}")
+                # 这里我们只记录错误但不中断流程，因为setting是可选的
+        
         except Exception as e:
             logging.error(f"读取 Excel 文件失败: {str(e)}", exc_info=True)
             return jsonify({"message": f"读取 Excel 文件失败: {str(e)}"}), 500
@@ -244,8 +285,9 @@ def create_task_api():
             # 插入 autoreport_tasks 表，包含 next_run_at 字段
             sql = """
                 INSERT INTO autoreport_tasks 
-                (gameType, taskName, frequency, dayOfMonth, dayOfWeek, `time`, next_run_at) 
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                (gameType, taskName, frequency, dayOfMonth, dayOfWeek, `time`, next_run_at, settings) 
+                VALUES 
+                (%s, %s, %s, %s, %s, %s, %s, %s)
             """
             values = (
                 game_type,
@@ -254,7 +296,8 @@ def create_task_api():
                 day_of_month if day_of_month else None,
                 day_of_week if day_of_week else None,
                 time,
-                next_run_at  # 添加 next_run_at 值
+                next_run_at,
+                json.dumps(settings) if settings else None
             )
             print(f"执行SQL: {sql}")
             print(f"SQL参数: {values}")
