@@ -1323,10 +1323,47 @@ export default {
               i++
             }
 
-            // 用空格连接所有 SQL 部分
-            const merged_sql = sql_parts.join(' ')
+            // 用换行连接所有 SQL 部分
+            const merged_sql = sql_parts
+              .map(sql => sql || '') // 处理 null 或 undefined
+              .join('\n') // 用换行符连接
 
-            baseData.sql = merged_sql
+            // SQL 单元格字符长度上限
+            const SQL_CELL_LIMIT = 32000
+
+            // 如果合并后的 SQL 超过长度限制，需要分割
+            if (merged_sql.length > SQL_CELL_LIMIT) {
+              let remainingSql = merged_sql
+              let sqlIndex = 0 // 从0开始，这样第一个部分会存储在 sql 字段中
+
+              while (remainingSql.length > 0) {
+                let cutIndex = SQL_CELL_LIMIT
+
+                // 如果需要切割，寻找最近的换行
+                if (remainingSql.length > SQL_CELL_LIMIT) {
+                  // 在限制长度内查找最后一个换行
+                  const lastNewline = remainingSql.lastIndexOf('\n', SQL_CELL_LIMIT)
+
+                  // 如果找到换行符，在换行符后切割
+                  if (lastNewline > 0) {
+                    cutIndex = lastNewline + 1
+                  }
+                }
+
+                const currentPart = remainingSql.slice(0, cutIndex)
+                remainingSql = remainingSql.slice(cutIndex)
+
+                // 添加 SQL 字段，从 sql 开始
+                if (sqlIndex === 0) {
+                  baseData.sql = currentPart
+                } else {
+                  baseData[`sql${sqlIndex}`] = currentPart
+                }
+                sqlIndex++
+              }
+            } else {
+              baseData.sql = merged_sql
+            }
 
             groupedData[sheetName].push(baseData)
           })
