@@ -40,7 +40,7 @@ def connect_db_with_config(db_config):
 
 def execute_query(connection, query):
     """
-    执行SQL查询，支持大型SQL语句
+    执行SQL查询，支持大型SQL语句，保留换行和空格
     """
     try:
         # 修改连接设置以支持大型查询
@@ -53,6 +53,8 @@ def execute_query(connection, query):
                 config_cursor.execute("SET SESSION net_read_timeout=3600")  # 1小时
                 config_cursor.execute("SET SESSION max_execution_time=3600000")  # 1小时(毫秒)
                 config_cursor.execute("SET SESSION max_allowed_packet=1073741824")  # 1GB (注意：实际上这是无效的，仅为完整性)
+                # 设置 SQL 模式以保留空格
+                config_cursor.execute("SET SESSION sql_mode='NO_BACKSLASH_ESCAPES'")
             except Exception as e:
                 logging.warning(f"设置会话参数失败: {e}")
                 
@@ -65,11 +67,12 @@ def execute_query(connection, query):
         elif sql_length > 10000:
             logging.info(f"执行中等长度SQL查询, 长度: {sql_length} 字符")
         
-        # 执行查询
+        # 执行查询，保持原始格式
         multi = False
         if ";" in query and not query.strip().endswith(';'):
             multi = True  # 如果查询包含多个语句，使用multi=True
             
+        # 不对查询进行任何格式化或清理，直接执行
         cursor.execute(query, multi=multi)
         
         result = cursor.fetchall()
