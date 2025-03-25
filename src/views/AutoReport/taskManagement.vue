@@ -151,6 +151,11 @@
         style="width: 100%"
       >
         <el-table-column
+          prop="sheet_name"
+          label="sheet_name"
+          width="120"
+        />
+        <el-table-column
           prop="db_name"
           label="db_name"
           width="120"
@@ -158,7 +163,7 @@
         <el-table-column
           prop="output_sql"
           label="output_sql"
-          width="400"
+          width="350"
         />
         <el-table-column
           prop="format"

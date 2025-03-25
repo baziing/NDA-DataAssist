@@ -239,14 +239,28 @@ def register_task_management_routes(app, task_scheduler):
             connection = mysql.connector.connect(**DB_CONFIG)
             cursor = connection.cursor(dictionary=True)
             
-            # 查询SQL信息
+            # 查询SQL信息，添加sheet_name字段并按sheet_order和sql_order排序
             sql = """
-                SELECT * FROM autoreport_templates
+                SELECT 
+                    sheet_name,
+                    sheet_order,
+                    sql_order,
+                    db_name,
+                    output_sql,
+                    format,
+                    transpose,
+                    pos
+                FROM autoreport_templates
                 WHERE task_id = %s
-                ORDER BY sql_order
+                ORDER BY sheet_order, sql_order
             """
             cursor.execute(sql, (str(task_id),))
             sql_data = cursor.fetchall()
+            
+            # 移除sheet_order和sql_order字段
+            for item in sql_data:
+                item.pop('sheet_order', None)
+                item.pop('sql_order', None)
             
             print(f"查询结果: {sql_data}")  # 添加调试信息
             
