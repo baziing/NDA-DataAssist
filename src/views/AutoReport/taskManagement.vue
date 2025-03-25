@@ -679,14 +679,7 @@ export default {
     // 查看SQL
     handleViewSql(row) {
       this.dialogVisible = true
-
-      if (row.originalId) {
-        console.log('原始ID字符串:', row.originalId)
-      }
-
-      if (row.bigNumberId) {
-        console.log('BigNumber ID:', row.bigNumberId.toString())
-      }
+      this.currentTask = row // 保存当前任务信息
 
       // 尝试直接从数据库ID转换
       const taskId = String(row.id)
@@ -696,7 +689,6 @@ export default {
       const timestamp = new Date().getTime()
       const url = `http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/task_management/task_sql/${taskId}?_=${timestamp}`
       console.log('查看SQL - 请求 URL:', url)
-      console.log('查看SQL - 请求头:', { 'Content-Type': 'application/json' })
 
       fetch(url)
         .then(response => {
@@ -1268,91 +1260,195 @@ export default {
     },
     // 添加导出功能
     exportSqlInfo() {
-      // SQL 单元格字符长度上限
-      const SQL_CELL_LIMIT = 32000
+      // 详细输出 SQL 数据内容
+      // console.log('完整的 SQL 数据:', JSON.stringify(this.sqlData, null, 2))
+      // console.log('当前任务:', this.currentTask)
 
-      // 按 sheet_name 对数据进行分组
-      const groupedData = {}
-      this.sqlData.forEach(item => {
-        const sheetName = item.sheet_name || '未命名'
-        if (!groupedData[sheetName]) {
-          groupedData[sheetName] = []
-        }
+      // 如果有 currentTask，优先使用它
+      const taskId = this.currentTask?.id || (this.sqlData.length > 0 ? this.sqlData[0].task_id : null)
+      console.log('获取到的任务ID:', taskId)
 
-        // 创建基础数据对象
-        const baseData = {
-          db_name: item.db_name || '',
-          format: item.format || '',
-          pos: item.pos || '',
-          'transpose(Y/N)': item.transpose === 1 ? 'Y' : (item.transpose === 0 ? 'N' : item.transpose)
-        }
+      if (!taskId) {
+        console.error('无法获取任务ID')
+        this.$message.error('无法获取任务ID')
+        return
+      }
 
-        // 处理 SQL 拆分
-        const sql = item.output_sql || ''
-        if (sql.length > SQL_CELL_LIMIT) {
-          // 计算需要多少个 SQL 列
-          const sqlParts = []
-          for (let i = 0; i < sql.length; i += SQL_CELL_LIMIT) {
-            sqlParts.push(sql.substring(i, i + SQL_CELL_LIMIT))
+      // 从后端获取完整的任务信息
+      const url = `http://${settings.serverAddress}:${process.env.VUE_APP_API_PORT}/task_management/task/${taskId}`
+      console.log('请求URL:', url)
+
+      fetch(url)
+        .then(response => {
+          console.log('任务信息响应状态:', response.status)
+          if (!response.ok) {
+            return response.text().then(text => {
+              console.error('任务信息响应内容:', text)
+              throw new Error('获取任务信息失败')
+            })
+          }
+          return response.json()
+        })
+        .then(taskData => {
+          console.log('获取到的完整任务信息:', taskData)
+          const currentTask = taskData
+
+          // SQL 单元格字符长度上限
+          const SQL_CELL_LIMIT = 32000
+
+          // 按 sheet_name 对数据进行分组
+          const groupedData = {}
+          this.sqlData.forEach(item => {
+            const sheetName = item.sheet_name || '未命名'
+            if (!groupedData[sheetName]) {
+              groupedData[sheetName] = []
+            }
+
+            // 创建基础数据对象
+            const baseData = {
+              db_name: item.db_name || '',
+              format: item.format || '',
+              pos: item.pos || '',
+              'transpose(Y/N)': item.transpose === 1 ? 'Y' : (item.transpose === 0 ? 'N' : item.transpose)
+            }
+
+            // 处理 SQL 拆分
+            const sql = item.output_sql || ''
+            if (sql.length > SQL_CELL_LIMIT) {
+              // 计算需要多少个 SQL 列
+              const sqlParts = []
+              for (let i = 0; i < sql.length; i += SQL_CELL_LIMIT) {
+                sqlParts.push(sql.substring(i, i + SQL_CELL_LIMIT))
+              }
+
+              // 添加拆分后的 SQL 列
+              sqlParts.forEach((part, index) => {
+                baseData[`sql${index + 1}`] = part
+              })
+            } else {
+              // SQL 长度在限制范围内，使用单个 sql 列
+              baseData.sql = sql
+            }
+
+            groupedData[sheetName].push(baseData)
+          })
+
+          // 创建工作簿
+          const wb = XLSX.utils.book_new()
+
+          // 确保"整体战力"作为第一个页签
+          const sheetNames = Object.keys(groupedData)
+          const sortedSheetNames = sheetNames.sort((a, b) => {
+            if (a === '整体战力') return -1
+            if (b === '整体战力') return 1
+            return a.localeCompare(b)
+          })
+
+          // 为每个分组创建工作表
+          sortedSheetNames.forEach(sheetName => {
+            const ws = XLSX.utils.json_to_sheet(groupedData[sheetName])
+
+            // 设置列宽
+            const maxWidth = 50
+            const colWidths = {}
+            // 设置基础列的宽度
+            colWidths['A'] = 15 // db_name
+            colWidths['B'] = maxWidth // sql 或 sql1
+            colWidths['C'] = 30 // format
+            colWidths['D'] = 10 // pos
+            colWidths['E'] = 15 // transpose
+
+            // 如果有额外的 SQL 列，设置它们的宽度
+            const data = groupedData[sheetName]
+            if (data.length > 0) {
+              const firstRow = data[0]
+              const sqlColumns = Object.keys(firstRow).filter(key => key.startsWith('sql'))
+              sqlColumns.forEach((_, index) => {
+                // 从 F 列开始设置额外 SQL 列的宽度
+                const colIndex = String.fromCharCode(70 + index) // F, G, H, ...
+                colWidths[colIndex] = maxWidth
+              })
+            }
+
+            ws['!cols'] = Object.keys(colWidths).map(col => ({ wch: colWidths[col] }))
+            XLSX.utils.book_append_sheet(wb, ws, sheetName)
+          })
+
+          // 如果有 settings，添加 {setting} 页签
+          if (currentTask && currentTask.settings) {
+            console.log('处理 settings:', currentTask.settings)
+            try {
+              let settingsObj
+              try {
+                settingsObj =
+                  typeof currentTask.settings === 'string'
+                    ? JSON.parse(currentTask.settings)
+                    : currentTask.settings
+              } catch (parseError) {
+                console.error('解析 settings 失败:', parseError)
+                settingsObj = currentTask.settings
+              }
+
+              console.log('解析后的 settings:', settingsObj)
+
+              // 检查是否有 freeze 配置
+              if (
+                settingsObj &&
+                settingsObj.freeze &&
+                Array.isArray(settingsObj.freeze)
+              ) {
+                console.log('发现 freeze 配置:', settingsObj.freeze)
+
+                // 转换 settings 为表格数据
+                const settingsData = settingsObj.freeze.map((item) => ({
+                  fun: '冻结',
+                  title: item.title || '',
+                  config: Array.isArray(item.config)
+                    ? item.config.join(';')
+                    : typeof item.config === 'string'
+                      ? item.config
+                      : ''
+                }))
+
+                console.log('转换后的 settings 数据:', settingsData)
+
+                if (settingsData.length > 0) {
+                  // 创建 settings 工作表
+                  const settingsWs = XLSX.utils.json_to_sheet(settingsData)
+
+                  // 设置 settings 工作表的列宽
+                  settingsWs['!cols'] = [
+                    { wch: 10 }, // fun 列宽
+                    { wch: 20 }, // title 列宽
+                    { wch: 30 } // config 列宽
+                  ]
+
+                  // 添加 settings 工作表
+                  XLSX.utils.book_append_sheet(wb, settingsWs, '{setting}')
+                  console.log('成功添加 {setting} 工作表')
+                }
+              } else {
+                console.log('未找到有效的 freeze 配置:', settingsObj)
+              }
+            } catch (e) {
+              console.error('处理 settings 失败:', e)
+              this.$message.warning(
+                '处理配置信息时出错，{setting} 工作表可能未正确生成'
+              )
+            }
+          } else {
+            console.log('当前任务没有 settings 配置')
           }
 
-          // 添加拆分后的 SQL 列
-          sqlParts.forEach((part, index) => {
-            baseData[`sql${index + 1}`] = part
-          })
-        } else {
-          // SQL 长度在限制范围内，使用单个 sql 列
-          baseData.sql = sql
-        }
-
-        groupedData[sheetName].push(baseData)
-      })
-
-      // 创建工作簿
-      const wb = XLSX.utils.book_new()
-
-      // 确保"整体战力"作为第一个页签
-      const sheetNames = Object.keys(groupedData)
-      const sortedSheetNames = sheetNames.sort((a, b) => {
-        if (a === '整体战力') return -1
-        if (b === '整体战力') return 1
-        return a.localeCompare(b)
-      })
-
-      // 为每个分组创建工作表
-      sortedSheetNames.forEach(sheetName => {
-        const ws = XLSX.utils.json_to_sheet(groupedData[sheetName])
-
-        // 设置列宽
-        const maxWidth = 50
-        const colWidths = {}
-        // 设置基础列的宽度
-        colWidths['A'] = 15 // db_name
-        colWidths['B'] = maxWidth // sql 或 sql1
-        colWidths['C'] = 30 // format
-        colWidths['D'] = 10 // pos
-        colWidths['E'] = 15 // transpose
-
-        // 如果有额外的 SQL 列，设置它们的宽度
-        const data = groupedData[sheetName]
-        if (data.length > 0) {
-          const firstRow = data[0]
-          const sqlColumns = Object.keys(firstRow).filter(key => key.startsWith('sql'))
-          sqlColumns.forEach((_, index) => {
-            // 从 F 列开始设置额外 SQL 列的宽度
-            const colIndex = String.fromCharCode(70 + index) // F, G, H, ...
-            colWidths[colIndex] = maxWidth
-          })
-        }
-
-        ws['!cols'] = Object.keys(colWidths).map(col => ({ wch: colWidths[col] }))
-        XLSX.utils.book_append_sheet(wb, ws, sheetName)
-      })
-
-      // 生成文件名
-      const fileName = `SQL信息_${moment().format('YYYY-MM-DD_HHmmss')}.xlsx`
-      // 保存文件
-      XLSX.writeFile(wb, fileName)
+          // 生成文件名
+          const fileName = `SQL信息_${moment().format('YYYY-MM-DD_HHmmss')}.xlsx`
+          // 保存文件
+          XLSX.writeFile(wb, fileName)
+        })
+        .catch(error => {
+          console.error('获取任务信息失败:', error)
+          this.$message.error('获取任务信息失败，无法导出完整的 SQL 信息')
+        })
     }
   }
 }
