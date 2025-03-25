@@ -141,10 +141,18 @@
       </div>
     </el-card>
     <el-dialog
-      title="SQL 信息"
       :visible.sync="dialogVisible"
       width="80%"
     >
+      <template slot="title">
+        <span>SQL 信息</span>
+        <i
+          class="el-icon-download"
+          style="margin-left: 10px; cursor: pointer; font-size: 16px; color: #409EFF;"
+          title="导出 SQL 信息"
+          @click="exportSqlInfo"
+        />
+      </template>
       <el-table
         :data="sqlData"
         class="sql-info-table"
@@ -227,6 +235,15 @@
         <el-form-item label="输出示例">
           <span v-if="editOutputExample">{{ editOutputExample }}</span>
           <span v-else>请在上方输入任务名称</span>
+        </el-form-item>
+        <el-form-item label="设置参数" style="margin-right: 50px;">
+          <el-input
+            v-model="editForm.settings"
+            type="textarea"
+            :rows="5"
+            placeholder="[可选]输入JSON 格式的参数设置"
+          />
+          <div class="form-tip">暂仅支持冻结。请输入有效的JSON 格式，例如：{"freeze": [{"title": "整体战力", "config": "B2"}]}</div>
         </el-form-item>
         <el-row>
           <el-col :span="24">
@@ -428,6 +445,7 @@ import moment from 'moment'
 import axios from 'axios'
 import settings from '@/settings'
 import DeleteConfirmationDialog from '@/components/DeleteConfirmationDialog.vue'
+import XLSX from 'xlsx'
 
 export default {
   name: 'TaskManagement',
@@ -464,7 +482,8 @@ export default {
         dayOfWeek: '',
         dayOfMonth: '',
         isEnabled: true,
-        recipients: []
+        recipients: [],
+        settings: ''
       },
       sortParams: [
         { field: 'last_run_at', order: 'desc' },
@@ -716,8 +735,21 @@ export default {
       this.editForm = {
         ...row,
         isEnabled: row.is_enabled === 1 || row.is_enabled === true,
-        recipients: [] // 初始化为空数组，等待异步加载
+        recipients: [], // 初始化为空数组，等待异步加载
+        settings: '' // 初始化设置字段
       }
+
+      // 从任务数据中获取设置
+      try {
+        if (row.settings) {
+          const settingsObj = typeof row.settings === 'string' ? JSON.parse(row.settings) : row.settings
+          this.editForm.settings = JSON.stringify(settingsObj, null, 2)
+        }
+      } catch (e) {
+        console.error('解析设置失败:', e)
+        this.editForm.settings = row.settings || ''
+      }
+
       this.originalTaskName = row.taskName
       this.editDialogVisible = true
       this.updateEditOutputExample() // 初始化输出示例
@@ -862,9 +894,22 @@ export default {
 
     // 更新任务
     updateTask(taskId) {
+      // 验证 settings 的 JSON 格式
+      if (this.editForm.settings) {
+        try {
+          // 只验证 JSON 格式的有效性
+          JSON.parse(this.editForm.settings)
+        } catch (e) {
+          this.$message.error('设置参数不是有效的 JSON 格式')
+          this.updating = false
+          return
+        }
+      }
+
       const updateData = {
         ...this.editForm,
-        is_enabled: this.editForm.isEnabled ? 1 : 0 // 转换为后端期望的格式
+        is_enabled: this.editForm.isEnabled ? 1 : 0, // 转换为后端期望的格式
+        settings: this.editForm.settings // 添加 settings 字段
       }
 
       // 如果调度状态发生了变化，需要特殊处理
@@ -1220,6 +1265,94 @@ export default {
       setTimeout(() => {
         this.applyTagStyles()
       }, 100)
+    },
+    // 添加导出功能
+    exportSqlInfo() {
+      // SQL 单元格字符长度上限
+      const SQL_CELL_LIMIT = 32000
+
+      // 按 sheet_name 对数据进行分组
+      const groupedData = {}
+      this.sqlData.forEach(item => {
+        const sheetName = item.sheet_name || '未命名'
+        if (!groupedData[sheetName]) {
+          groupedData[sheetName] = []
+        }
+
+        // 创建基础数据对象
+        const baseData = {
+          db_name: item.db_name || '',
+          format: item.format || '',
+          pos: item.pos || '',
+          'transpose(Y/N)': item.transpose === 1 ? 'Y' : (item.transpose === 0 ? 'N' : item.transpose)
+        }
+
+        // 处理 SQL 拆分
+        const sql = item.output_sql || ''
+        if (sql.length > SQL_CELL_LIMIT) {
+          // 计算需要多少个 SQL 列
+          const sqlParts = []
+          for (let i = 0; i < sql.length; i += SQL_CELL_LIMIT) {
+            sqlParts.push(sql.substring(i, i + SQL_CELL_LIMIT))
+          }
+
+          // 添加拆分后的 SQL 列
+          sqlParts.forEach((part, index) => {
+            baseData[`sql${index + 1}`] = part
+          })
+        } else {
+          // SQL 长度在限制范围内，使用单个 sql 列
+          baseData.sql = sql
+        }
+
+        groupedData[sheetName].push(baseData)
+      })
+
+      // 创建工作簿
+      const wb = XLSX.utils.book_new()
+
+      // 确保"整体战力"作为第一个页签
+      const sheetNames = Object.keys(groupedData)
+      const sortedSheetNames = sheetNames.sort((a, b) => {
+        if (a === '整体战力') return -1
+        if (b === '整体战力') return 1
+        return a.localeCompare(b)
+      })
+
+      // 为每个分组创建工作表
+      sortedSheetNames.forEach(sheetName => {
+        const ws = XLSX.utils.json_to_sheet(groupedData[sheetName])
+
+        // 设置列宽
+        const maxWidth = 50
+        const colWidths = {}
+        // 设置基础列的宽度
+        colWidths['A'] = 15 // db_name
+        colWidths['B'] = maxWidth // sql 或 sql1
+        colWidths['C'] = 30 // format
+        colWidths['D'] = 10 // pos
+        colWidths['E'] = 15 // transpose
+
+        // 如果有额外的 SQL 列，设置它们的宽度
+        const data = groupedData[sheetName]
+        if (data.length > 0) {
+          const firstRow = data[0]
+          const sqlColumns = Object.keys(firstRow).filter(key => key.startsWith('sql'))
+          sqlColumns.forEach((_, index) => {
+            // 从 F 列开始设置额外 SQL 列的宽度
+            const colIndex = String.fromCharCode(70 + index) // F, G, H, ...
+            colWidths[colIndex] = maxWidth
+          })
+        }
+
+        ws['!cols'] = Object.keys(colWidths).map(col => ({ wch: colWidths[col] }))
+        XLSX.utils.book_append_sheet(wb, ws, sheetName)
+      })
+
+      // 生成文件名
+      const fileName = `SQL信息_${moment().format('YYYY-MM-DD_HHmmss')}.xlsx`
+      // 保存文件
+      XLSX.writeFile(wb, fileName)
     }
   }
 }

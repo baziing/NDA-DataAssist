@@ -405,14 +405,16 @@ def register_task_management_routes(app, task_scheduler):
                     SET gameType = %s, taskName = %s, frequency = %s, 
                         dayOfMonth = %s, dayOfWeek = %s, time = %s,
                         next_run_at = %s, last_modified_at = NOW(),
-                        is_enabled = %s
+                        is_enabled = %s, settings = %s
                     WHERE id = %s
                 """
                 values = (
                     game_type, task_name, frequency,
                     day_of_month if day_of_month else None,
                     day_of_week if day_of_week else None,
-                    time, next_run_at, is_enabled, task_id
+                    time, next_run_at, is_enabled, 
+                    data.get('settings'),  # 添加 settings 字段
+                    task_id
                 )
                 
                 logging.info(f"更新任务 - SQL: {sql}, 参数: {values}")
