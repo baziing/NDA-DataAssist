@@ -1371,17 +1371,28 @@ export default {
           // 创建工作簿
           const wb = XLSX.utils.book_new()
 
-          // 确保"整体战力"作为第一个页签
+          // 按照 sheet_order 对页签进行排序
           const sheetNames = Object.keys(groupedData)
           const sortedSheetNames = sheetNames.sort((a, b) => {
-            if (a === '整体战力') return -1
-            if (b === '整体战力') return 1
-            return a.localeCompare(b)
+            // 获取每个 sheet 的第一行数据来获取 sheet_order
+            const aOrder = groupedData[a][0]?.sheet_order || 0
+            const bOrder = groupedData[b][0]?.sheet_order || 0
+            return aOrder - bOrder
           })
 
           // 为每个分组创建工作表
           sortedSheetNames.forEach(sheetName => {
-            const ws = XLSX.utils.json_to_sheet(groupedData[sheetName])
+            // 重命名 sql 字段为 output_sql
+            const sheetData = groupedData[sheetName].map(row => {
+              const newRow = { ...row }
+              if ('sql' in newRow) {
+                newRow.output_sql = newRow.sql
+                delete newRow.sql
+              }
+              return newRow
+            })
+
+            const ws = XLSX.utils.json_to_sheet(sheetData)
 
             // 设置列宽
             const maxWidth = 50
