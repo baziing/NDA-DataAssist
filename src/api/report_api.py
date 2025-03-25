@@ -308,8 +308,23 @@ def create_task_api():
             # 插入模板信息
             sql_order = 1
             for row in excel_result['sql_list']:
+                # 检查是否有多个 SQL 字段需要合并
+                sql_parts = []
+                base_sql = row['output_sql'] or ''
+                sql_parts.append(base_sql)
+                
+                # 检查并合并 sql1, sql2, sql3 等字段
+                i = 1
+                while f'sql{i}' in row:
+                    if row[f'sql{i}']:
+                        sql_parts.append(row[f'sql{i}'])
+                    i += 1
+                
+                # 用空格连接所有 SQL 部分
+                merged_sql = ' '.join(sql_parts)
+                
                 sql = "INSERT INTO autoreport_templates (task_id, db_name, output_sql, sql_order, transpose, format, pos, sheet_name, sheet_order) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                values = (str(task_id), row['db_name'], row['output_sql'], sql_order, row.get('transpose', False), row.get('format'), row.get('pos'), row.get('sheet_name'), row.get('sheet_order'))
+                values = (str(task_id), row['db_name'], merged_sql, sql_order, row.get('transpose', False), row.get('format'), row.get('pos'), row.get('sheet_name'), row.get('sheet_order'))
                 cursor.execute(sql, values)
                 sql_order += 1
                 

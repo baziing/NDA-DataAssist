@@ -33,11 +33,14 @@ def check_excel_file(file_path):
             if sheet_name == setting_sheet:
                 continue
                 
-            columns = [col.lower() for col in df.columns]
+            # 将列名转换为小写以进行不区分大小写的比较
+            df.columns = df.columns.str.lower()
+            columns = df.columns.tolist()
+            
             if 'db_name' not in columns or 'output_sql' not in columns:
                 return {"is_valid": False, "message": f"工作表 '{sheet_name}' 必须包含 db_name 和 output_sql 字段（不区分大小写）"}
 
-            # 获取每一行的 db_name 和 output_sql
+            # 获取每一行的数据
             for index, row in df.iterrows():
                 sql_dict = {
                     'db_name': row['db_name'],
@@ -46,12 +49,22 @@ def check_excel_file(file_path):
                     'sheet_name': sheet_name,
                     'sheet_order': sheet_order
                 }
-                if 'format' in row and row['format'] != '':
+                
+                # 检查并添加 sql1, sql2, sql3 等字段
+                i = 1
+                while f'sql{i}' in columns:
+                    if pd.notna(row[f'sql{i}']):  # 检查值是否为空
+                        sql_dict[f'sql{i}'] = row[f'sql{i}']
+                    i += 1
+                
+                # 添加其他可选字段
+                if 'format' in columns and pd.notna(row['format']):
                     sql_dict['format'] = row['format']
-                if 'pos' in row and row['pos'] != '':
+                if 'pos' in columns and pd.notna(row['pos']):
                     sql_dict['pos'] = row['pos']
-                if 'transpose' in row and row['transpose'] != '':
+                if 'transpose' in columns and pd.notna(row['transpose']):
                     sql_dict['transpose'] = row['transpose']
+                
                 sql_list.append(sql_dict)
             sheet_order += 1
             

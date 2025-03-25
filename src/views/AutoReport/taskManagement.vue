@@ -1293,9 +1293,6 @@ export default {
           console.log('获取到的完整任务信息:', taskData)
           const currentTask = taskData
 
-          // SQL 单元格字符长度上限
-          const SQL_CELL_LIMIT = 32000
-
           // 按 sheet_name 对数据进行分组
           const groupedData = {}
           this.sqlData.forEach(item => {
@@ -1312,23 +1309,24 @@ export default {
               'transpose(Y/N)': item.transpose === 1 ? 'Y' : (item.transpose === 0 ? 'N' : item.transpose)
             }
 
-            // 处理 SQL 拆分
-            const sql = item.output_sql || ''
-            if (sql.length > SQL_CELL_LIMIT) {
-              // 计算需要多少个 SQL 列
-              const sqlParts = []
-              for (let i = 0; i < sql.length; i += SQL_CELL_LIMIT) {
-                sqlParts.push(sql.substring(i, i + SQL_CELL_LIMIT))
-              }
+            // 检查是否有多个 SQL 字段需要合并
+            const sql_parts = []
+            const base_sql = item.output_sql || ''
+            sql_parts.push(base_sql)
 
-              // 添加拆分后的 SQL 列
-              sqlParts.forEach((part, index) => {
-                baseData[`sql${index + 1}`] = part
-              })
-            } else {
-              // SQL 长度在限制范围内，使用单个 sql 列
-              baseData.sql = sql
+            // 检查并合并 sql1, sql2, sql3 等字段
+            let i = 1
+            while (`sql${i}` in item) {
+              if (item[`sql${i}`]) {
+                sql_parts.push(item[`sql${i}`])
+              }
+              i++
             }
+
+            // 用空格连接所有 SQL 部分
+            const merged_sql = sql_parts.join(' ')
+
+            baseData.sql = merged_sql
 
             groupedData[sheetName].push(baseData)
           })
