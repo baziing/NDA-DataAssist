@@ -263,6 +263,19 @@ class TaskScheduler:
 
                 game_type = task_data['gameType']
                 task_name = task_data['taskName']
+                settings = task_data.get('settings')  # 获取settings字段
+
+                # 解析settings字段
+                if settings:
+                    try:
+                        if isinstance(settings, str):
+                            settings = json.loads(settings)
+                    except json.JSONDecodeError:
+                        logging.warning(f"解析settings字段失败: {settings}")
+                        settings = None
+
+                # 更新task_info中的settings
+                task_info['settings'] = settings
 
                 # 查询 autoreport_templates 表
                 cursor.execute("SELECT * FROM autoreport_templates WHERE task_id = %s ORDER BY sql_order", (task_id,))
@@ -288,9 +301,20 @@ class TaskScheduler:
                     'output_sql': template['output_sql'].replace('\n', ' '),
                     'format': template.get('format', ''),  # 如果没有 format 字段，则为空字符串
                     'transpose(Y/N)': 'Y' if template.get('transpose') else 'N',  # 如果没有 transpose 字段，则为 'N'
-                    'pos': template.get('pos', '')  # 如果没有 pos 字段，则为空字符串
+                    'pos': template.get('pos', ''),  # 如果没有 pos 字段，则为空字符串
+                    'sheet_name': template.get('sheet_name', ''),  # 读取 sheet_name 字段
+                    'sheet_order': template.get('sheet_order', 0)  # 读取 sheet_order 字段
                 })
             df = pd.DataFrame(data)
+
+            # 将DataFrame按照sheet_name和sheet_order组织成字典格式
+            sheets_data = {}
+            for sheet_name, group in df.groupby('sheet_name', dropna=False):
+                sheet_name = sheet_name or '汇总报表'  # 如果sheet_name为空，使用默认名称
+                sheets_data[sheet_name] = {
+                    'order': group['sheet_order'].iloc[0],  # 使用该工作表的第一个order值
+                    'data': group  # 直接使用分组后的DataFrame
+                }
 
             # 创建一个模拟的task对象
             class MockTask:
@@ -310,7 +334,7 @@ class TaskScheduler:
             os.makedirs(output_dir, exist_ok=True)
             
             # 调用 generate_report 函数，指定输出目录
-            output_path = generate_report(task, task_info, data_frame=df, variables_filename=None, output_dir=output_dir)
+            output_path = generate_report(task, task_info, data_frame=sheets_data, variables_filename=None, output_dir=output_dir)
 
             if output_path is None:
                 logging.error(f"任务 {task_info['taskName']} 执行完成，但报表路径为空")

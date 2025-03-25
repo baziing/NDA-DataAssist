@@ -14,27 +14,47 @@ def check_excel_file(file_path):
             - sql_list: list[dict]: 包含每一行数据的字典列表
     """
     try:
-        df = pd.read_excel(file_path)
-        # 检查是否包含 db_name 和 output_sql 字段（不区分大小写）
-        columns = [col.lower() for col in df.columns]
-        if 'db_name' not in columns or 'output_sql' not in columns:
-            return {"is_valid": False, "message": "Excel 文件必须包含 db_name 和 output_sql 字段（不区分大小写）"}
+        # 读取所有工作表
+        all_sheets_data = pd.read_excel(file_path, sheet_name=None)
 
-        # 获取每一行的 db_name 和 output_sql
+        # 检查是否包含 db_name 和 output_sql 字段（不区分大小写）
         sql_list = []
-        for index, row in df.iterrows():
-            sql_dict = {
-                'db_name': row['db_name'],
-                'output_sql': row['output_sql'],
-                'sql_order': index + 1
-            }
-            if 'format' in row and row['format'] != '':
-                sql_dict['format'] = row['format']
-            if 'pos' in row and row['pos'] != '':
-                sql_dict['pos'] = row['pos']
-            if 'transpose' in row and row['transpose'] != '':
-                sql_dict['transpose'] = row['transpose']
-            sql_list.append(sql_dict)
+        sheet_order = 1
+        
+        # 先检查是否存在setting工作表
+        setting_sheet = None
+        for sheet_name in all_sheets_data.keys():
+            if '{setting}' in sheet_name.lower():
+                setting_sheet = sheet_name
+                break
+        
+        for sheet_name, df in all_sheets_data.items():
+            # 跳过setting工作表
+            if sheet_name == setting_sheet:
+                continue
+                
+            columns = [col.lower() for col in df.columns]
+            if 'db_name' not in columns or 'output_sql' not in columns:
+                return {"is_valid": False, "message": f"工作表 '{sheet_name}' 必须包含 db_name 和 output_sql 字段（不区分大小写）"}
+
+            # 获取每一行的 db_name 和 output_sql
+            for index, row in df.iterrows():
+                sql_dict = {
+                    'db_name': row['db_name'],
+                    'output_sql': row['output_sql'],
+                    'sql_order': index + 1,
+                    'sheet_name': sheet_name,
+                    'sheet_order': sheet_order
+                }
+                if 'format' in row and row['format'] != '':
+                    sql_dict['format'] = row['format']
+                if 'pos' in row and row['pos'] != '':
+                    sql_dict['pos'] = row['pos']
+                if 'transpose' in row and row['transpose'] != '':
+                    sql_dict['transpose'] = row['transpose']
+                sql_list.append(sql_dict)
+            sheet_order += 1
+            
         return {"is_valid": True, "message": "", "sql_list": sql_list}
     except FileNotFoundError:
         return {"is_valid": False, "message": "文件未找到"}

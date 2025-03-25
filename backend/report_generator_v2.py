@@ -15,6 +15,7 @@ from openpyxl.utils import get_column_letter
 from backend.file_name_formatter import format_filename, get_unique_filename
 import shutil
 import re
+import json
 
 UPLOAD_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'tmp'))
 
@@ -97,29 +98,52 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
             
             task.update_progress({'progress': 5, 'log': '读取输入文件'})
         else:
-            # 如果使用data_frame，则只有一个工作表
-            sheet_names = ['汇总报表']
-            all_sheets_data = {'汇总报表': data_frame}
+            # 如果使用data_frame，从data_frame中获取sheet信息
+            if isinstance(data_frame, dict):
+                # 如果data_frame是字典，可能包含多个工作表
+                sheet_names = []
+                all_sheets_data = {}
+                
+                # 获取所有工作表信息并按order排序
+                sheet_info = []
+                for sheet_name, sheet_data in data_frame.items():
+                    order = sheet_data.get('order', 999) if isinstance(sheet_data, dict) else 999
+                    actual_data = sheet_data.get('data', sheet_data) if isinstance(sheet_data, dict) else sheet_data
+                    sheet_info.append((sheet_name, order, actual_data))
+                
+                # 按order排序
+                sheet_info.sort(key=lambda x: x[1])
+                
+                # 重新组织数据
+                for sheet_name, _, sheet_data in sheet_info:
+                    sheet_names.append(sheet_name)
+                    all_sheets_data[sheet_name] = sheet_data
+            else:
+                # 如果data_frame是单个DataFrame，使用默认工作表名
+                sheet_names = ['汇总报表']
+                all_sheets_data = {'汇总报表': data_frame}
             
-            # 从task_info中读取setting配置
-            try:
-                if hasattr(task_info, 'settings') and task_info['settings']:
-                    settings_str = task_info['settings']
-                    if isinstance(settings_str, str):
-                        import json
-                        settings = json.loads(settings_str)
-                    else:
-                        settings = settings_str
+            # 从task_info中读取setting配置（仅用于定时报表）
+            if task_info and hasattr(task_info, 'settings'):
+                try:
+                    settings = task_info.settings if hasattr(task_info, 'settings') else None
+                    if settings:
+                        if isinstance(settings, str):
+                            settings = json.loads(settings)
+                        elif isinstance(settings, dict):
+                            settings = settings
                         
-                    if isinstance(settings, dict) and 'freeze' in settings:
-                        for item in settings['freeze']:
-                            if isinstance(item, dict) and 'title' in item and 'config' in item:
-                                title = str(item['title']).strip()
-                                config = str(item['config']).strip() if item['config'] else ''
-                                if title:
-                                    setting_info[title] = config
-            except Exception as e:
-                logging.warning(f'处理数据库setting配置时出错: {e}')
+                        # 处理冻结设置
+                        if isinstance(settings, dict) and 'freeze' in settings:
+                            for item in settings['freeze']:
+                                if isinstance(item, dict) and 'title' in item and 'config' in item:
+                                    title = str(item['title']).strip()
+                                    config = str(item['config']).strip() if item['config'] else ''
+                                    if title:
+                                        setting_info[title] = config
+                                        logging.info(f'读取到冻结设置: sheet={title}, config={config}')
+                except Exception as e:
+                    logging.warning(f'处理setting配置时出错: {e}')
 
         # 如果提供了输出目录，使用它；否则使用默认目录
         if output_dir:
