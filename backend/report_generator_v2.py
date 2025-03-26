@@ -124,26 +124,37 @@ def generate_report(task, task_info, data_frame=None, input_file=None, variables
                 all_sheets_data = {'汇总报表': data_frame}
             
             # 从task_info中读取setting配置（仅用于定时报表）
-            if task_info and hasattr(task_info, 'settings'):
+            if task and hasattr(task, 'settings'):
                 try:
-                    settings = task_info.settings if hasattr(task_info, 'settings') else None
+                    logging.info(f'开始处理task的settings')
+                    logging.info(f'task类型: {type(task)}')
+                    logging.info(f'task属性: {dir(task)}')
+                    settings = task.settings
+                    logging.info(f'从task读取到的settings: {settings}')
                     if settings:
                         if isinstance(settings, str):
+                            logging.info(f'settings是字符串类型，尝试解析')
                             settings = json.loads(settings)
+                            logging.info(f'解析后的settings: {settings}')
                         elif isinstance(settings, dict):
+                            logging.info(f'settings是字典类型，直接使用')
                             settings = settings
                         
                         # 处理冻结设置
                         if isinstance(settings, dict) and 'freeze' in settings:
+                            logging.info(f'发现freeze配置: {settings["freeze"]}')
                             for item in settings['freeze']:
                                 if isinstance(item, dict) and 'title' in item and 'config' in item:
                                     title = str(item['title']).strip()
                                     config = str(item['config']).strip() if item['config'] else ''
                                     if title:
                                         setting_info[title] = config
-                                        logging.info(f'读取到冻结设置: sheet={title}, config={config}')
+                                        logging.info(f'应用冻结设置: sheet={title}, config={config}')
                 except Exception as e:
                     logging.warning(f'处理setting配置时出错: {e}')
+                    logging.warning(f'原始settings内容: {task.settings}')
+            else:
+                logging.info(f'task不存在或没有settings属性')
 
         # 如果提供了输出目录，使用它；否则使用默认目录
         if output_dir:

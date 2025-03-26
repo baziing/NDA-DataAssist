@@ -270,12 +270,18 @@ class TaskScheduler:
                     try:
                         if isinstance(settings, str):
                             settings = json.loads(settings)
+                        # 确保 settings 是字典类型
+                        if not isinstance(settings, dict):
+                            settings = {}
                     except json.JSONDecodeError:
                         logging.warning(f"解析settings字段失败: {settings}")
-                        settings = None
+                        settings = {}
+                else:
+                    settings = {}
 
                 # 更新task_info中的settings
                 task_info['settings'] = settings
+                logging.info(f"任务 {task_name} 的 settings: {settings}")  # 添加日志
 
                 # 查询 autoreport_templates 表
                 cursor.execute("SELECT * FROM autoreport_templates WHERE task_id = %s ORDER BY sql_order", (task_id,))
@@ -318,16 +324,28 @@ class TaskScheduler:
 
             # 创建一个模拟的task对象
             class MockTask:
-                def __init__(self, task_name):
+                def __init__(self, task_name, task_info):
                     self.cancelled = False
                     self.progress_data = {'progress': 0, 'log': ''}
                     self.task_name = task_name
+                    self._task_info = task_info  # 保存task_info引用
 
                 def update_progress(self, data):
                     self.progress_data = data
                     logging.info(f"Task Progress: {data['progress']}%, Log: {data['log']}")
 
-            task = MockTask(task_data['taskName'])
+                @property
+                def settings(self):
+                    # 优先从task_info获取settings
+                    if hasattr(self._task_info, 'settings'):
+                        return self._task_info.settings
+                    # 如果task_info是字典，从字典中获取
+                    if isinstance(self._task_info, dict) and 'settings' in self._task_info:
+                        return self._task_info['settings']
+                    return None
+
+            task = MockTask(task_data['taskName'], task_info)
+            logging.info(f"创建MockTask对象: {task.task_name}, settings: {task.settings}")
             
             # 创建任务专属目录
             output_dir = os.path.join('output', 'report_scheduler', str(task_id))
