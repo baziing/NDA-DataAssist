@@ -43,6 +43,12 @@ def execute_query(connection, query):
     执行SQL查询，支持大型SQL语句，保留换行和空格
     """
     try:
+        # 在执行前记录完整的SQL
+        # logging.info("准备执行的SQL查询:")
+        # logging.info("-" * 80)
+        # logging.info(f"\n{query}")
+        # logging.info("-" * 80)
+        
         # 修改连接设置以支持大型查询
         connection.set_charset_collation('utf8mb4', 'utf8mb4_general_ci')
         
@@ -52,7 +58,7 @@ def execute_query(connection, query):
                 # 设置会话级别参数，不影响全局设置
                 config_cursor.execute("SET SESSION net_read_timeout=3600")  # 1小时
                 config_cursor.execute("SET SESSION max_execution_time=3600000")  # 1小时(毫秒)
-                config_cursor.execute("SET SESSION max_allowed_packet=1073741824")  # 1GB (注意：实际上这是无效的，仅为完整性)
+                config_cursor.execute("SET SESSION max_allowed_packet=1073741824")  # 1GB
                 # 设置 SQL 模式以保留空格
                 config_cursor.execute("SET SESSION sql_mode='NO_BACKSLASH_ESCAPES'")
             except Exception as e:

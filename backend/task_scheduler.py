@@ -298,12 +298,12 @@ class TaskScheduler:
             for template in templates:
                 data.append({
                     'db_name': template['db_name'],
-                    'output_sql': template['output_sql'].replace('\n', ' '),
-                    'format': template.get('format', ''),  # 如果没有 format 字段，则为空字符串
-                    'transpose(Y/N)': 'Y' if template.get('transpose') else 'N',  # 如果没有 transpose 字段，则为 'N'
-                    'pos': template.get('pos', ''),  # 如果没有 pos 字段，则为空字符串
-                    'sheet_name': template.get('sheet_name', ''),  # 读取 sheet_name 字段
-                    'sheet_order': template.get('sheet_order', 0)  # 读取 sheet_order 字段
+                    'output_sql': template['output_sql'],  # 保留原始格式，不替换换行符
+                    'format': template.get('format', ''),
+                    'transpose': template.get('transpose', 'N'),
+                    'pos': template.get('pos', ''),
+                    'sheet_name': template.get('sheet_name', '汇总报表'),
+                    'sheet_order': template.get('sheet_order', 0)
                 })
             df = pd.DataFrame(data)
 
