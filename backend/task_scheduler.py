@@ -204,75 +204,58 @@ class TaskScheduler:
             elif frequency == 'month' and day_of_month:
                 # 月度任务处理逻辑
                 try:
-                    # 确保day_of_month是有效的数字
-                    day = int(day_of_month)
-                    if 1 <= day <= 31:
-                        # 获取当前日期
-                        now = datetime.now()
-                        
-                        # 计算下次执行时间
-                        def calculate_next_run():
-                            current = datetime.now()
-                            # 如果今天已经过了本月的执行日期，调度到下个月
-                            if current.day > day:
-                                # 计算下个月的执行日期
-                                if current.month == 12:
-                                    next_run = datetime(current.year + 1, 1, day)
-                                else:
-                                    next_run = datetime(current.year, current.month + 1, day)
-                            else:
-                                # 如果今天还没到执行日期或正是执行日期，调度到本月
-                                next_run = datetime(current.year, current.month, day)
-                            
-                            # 设置具体的执行时间
-                            time_parts = task_info['time'].split(':')
-                            next_run = next_run.replace(
-                                hour=int(time_parts[0]),
-                                minute=int(time_parts[1]),
-                                second=0,
-                                microsecond=0
-                            )
-                            
-                            # 如果计算出的时间已经过去，调度到下个月
-                            if next_run < current:
-                                if next_run.month == 12:
-                                    next_run = next_run.replace(year=next_run.year + 1, month=1)
-                                else:
-                                    next_run = next_run.replace(month=next_run.month + 1)
-                            
-                            return next_run
-                        
-                        next_run = calculate_next_run()
-                        
-                        # 计算时间差
-                        time_diff = (next_run - now).total_seconds()
-                        
-                        # 使用 schedule 的 every().seconds.do() 来调度
-                        job = self.scheduler.every(int(time_diff)).seconds
-                        
-                        def monthly_job_wrapper():
-                            try:
-                                # 执行任务
-                                self.run_task(task_info)
-                            finally:
-                                # 计算下次执行时间
-                                next_run = calculate_next_run()
-                                # 创建新的调度（使用新的时间）
-                                new_time_diff = (next_run - datetime.now()).total_seconds()
-                                new_job = self.scheduler.every(int(new_time_diff)).seconds
-                                new_job.do(monthly_job_wrapper)
-                                logging.info(f"月度任务 {task_info['taskName']} 重新调度到 {next_run}")
-                                # 取消当前的一次性任务
-                                return schedule.CancelJob
-                        
-                        # 直接设置任务回调
-                        job.do(monthly_job_wrapper)
-                        
-                        logging.info(f"月度任务 {task_info['taskName']} 已调度到 {next_run}")
-                        return job
+                    day_of_month = int(day_of_month)
+                    logging.info(f"月份日期: {day_of_month}")
+                    
+                    # 先计算今天的目标时间
+                    target_time = datetime.strptime(task_info['time'], '%H:%M').time()
+                    target_datetime = datetime.combine(datetime.now().date(), target_time)
+                    
+                    # 如果是目标日期当天，且目标时间还没到，就用今天的时间
+                    if datetime.now().day == day_of_month and target_datetime > datetime.now():
+                        next_run_at = target_datetime
                     else:
-                        logging.error(f"无效的月份日期: {day_of_month}")
-                        return None
+                        # 否则计算下个月的执行时间
+                        if datetime.now().day > day_of_month or (datetime.now().day == day_of_month and target_datetime <= datetime.now()):
+                            # 如果今天的日期已经过了目标日期，或者是目标日期但时间已过，调度到下个月
+                            month = datetime.now().month + 1
+                            year = datetime.now().year
+                            if month > 12:
+                                month = 1
+                                year += 1
+                        else:
+                            # 如果今天的日期还没到目标日期，调度到本月
+                            month = datetime.now().month
+                            year = datetime.now().year
+                        
+                        next_run_at = datetime(year, month, day_of_month, int(task_info['time'][:2]), int(task_info['time'][3:]))
+                    
+                    logging.info(f"计算得到的下次执行时间: {next_run_at}")
+                    
+                    # 使用 schedule 的 every().seconds.do() 来调度
+                    time_diff = (next_run_at - datetime.now()).total_seconds()
+                    job = self.scheduler.every(int(time_diff)).seconds
+                    
+                    def monthly_job_wrapper():
+                        try:
+                            # 执行任务
+                            self.run_task(task_info)
+                        finally:
+                            # 计算下次执行时间
+                            next_run_at = calculate_next_run_at(task_info['frequency'], task_info['dayOfMonth'], task_info['dayOfWeek'], task_info['time'])
+                            # 创建新的调度（使用新的时间）
+                            new_time_diff = (next_run_at - datetime.now()).total_seconds()
+                            new_job = self.scheduler.every(int(new_time_diff)).seconds
+                            new_job.do(monthly_job_wrapper)
+                            logging.info(f"月度任务 {task_info['taskName']} 重新调度到 {next_run_at}")
+                            # 取消当前的一次性任务
+                            return schedule.CancelJob
+                    
+                    # 直接设置任务回调
+                    job.do(monthly_job_wrapper)
+                    
+                    logging.info(f"月度任务 {task_info['taskName']} 已调度到 {next_run_at}")
+                    return job
                 except ValueError:
                     logging.error(f"无效的月份日期格式: {day_of_month}")
                     return None
@@ -560,27 +543,55 @@ def calculate_next_run_at(frequency, day_of_month, day_of_week, time):
                 6: 5,  # Saturday
                 7: 6  # Sunday
             }
-            day_of_week = weekday_map.get(int(day_of_week))
-            logging.info(f"星期几 (0-6): {day_of_week}")  # 添加星期几日志
-            days_ahead = day_of_week - now.weekday()
-            if days_ahead <= 0:  # Target day is today or in the past
-                days_ahead += 7
-            next_run_at = now + timedelta(days=days_ahead)
-            next_run_at = datetime.combine(next_run_at.date(), datetime.strptime(time, '%H:%M').time())
-        logging.info(f"frequency == 'week', 最终 next_run_at = {next_run_at}")  # 添加最终结果日志
+            target_weekday = weekday_map.get(int(day_of_week))
+            logging.info(f"星期几 (0-6): {target_weekday}")
+            
+            # 先计算今天的目标时间
+            today = now.date()
+            target_time = datetime.strptime(time, '%H:%M').time()
+            target_datetime = datetime.combine(today, target_time)
+            
+            # 如果是同一天，且目标时间还没到，就用今天的时间
+            if now.weekday() == target_weekday and target_datetime > now:
+                next_run_at = target_datetime
+            else:
+                # 否则计算到下一个目标星期几的天数
+                days_ahead = target_weekday - now.weekday()
+                if days_ahead <= 0:  # 如果已经过了本周的目标日期
+                    days_ahead += 7
+                next_run_at = datetime.combine((now + timedelta(days=days_ahead)).date(), target_time)
+            
+            logging.info(f"计算得到的下次执行时间: {next_run_at}")
     elif frequency == 'month':
         if day_of_month:
             try:
                 day_of_month = int(day_of_month)
-                logging.info(f"月份日期: {day_of_month}")  # 添加月份日期日志
-                next_run_at = datetime(now.year, now.month, day_of_month, int(time[:2]), int(time[3:]))
-                if next_run_at <= now:
-                    month = now.month + 1
-                    year = now.year
-                    if month > 12:
-                        month = 1
-                        year += 1
+                logging.info(f"月份日期: {day_of_month}")
+                
+                # 先计算今天的目标时间
+                target_time = datetime.strptime(time, '%H:%M').time()
+                target_datetime = datetime.combine(now.date(), target_time)
+                
+                # 如果是目标日期当天，且目标时间还没到，就用今天的时间
+                if now.day == day_of_month and target_datetime > now:
+                    next_run_at = target_datetime
+                else:
+                    # 否则计算下个月的执行时间
+                    if now.day > day_of_month or (now.day == day_of_month and target_datetime <= now):
+                        # 如果今天的日期已经过了目标日期，或者是目标日期但时间已过，调度到下个月
+                        month = now.month + 1
+                        year = now.year
+                        if month > 12:
+                            month = 1
+                            year += 1
+                    else:
+                        # 如果今天的日期还没到目标日期，调度到本月
+                        month = now.month
+                        year = now.year
+                    
                     next_run_at = datetime(year, month, day_of_month, int(time[:2]), int(time[3:]))
+                
+                logging.info(f"计算得到的下次执行时间: {next_run_at}")
             except ValueError:
                 # Handle invalid day_of_month
                 # 获取当月的最后一天
