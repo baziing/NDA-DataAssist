@@ -207,24 +207,69 @@ class TaskScheduler:
                     # 确保day_of_month是有效的数字
                     day = int(day_of_month)
                     if 1 <= day <= 31:
-                        # schedule库不直接支持每月特定日期，需要自定义处理
-                        # 使用每天运行，但在任务执行前检查是否是指定的日期
-                        job = self.scheduler.every().day.at(task_info['time'])
+                        # 获取当前日期
+                        now = datetime.now()
                         
-                        # 保存原始的day_of_month到job的标签中，以便后续检查
-                        job.tag(f"monthly-{day}")
+                        # 计算下次执行时间
+                        def calculate_next_run():
+                            current = datetime.now()
+                            # 如果今天已经过了本月的执行日期，调度到下个月
+                            if current.day > day:
+                                # 计算下个月的执行日期
+                                if current.month == 12:
+                                    next_run = datetime(current.year + 1, 1, day)
+                                else:
+                                    next_run = datetime(current.year, current.month + 1, day)
+                            else:
+                                # 如果今天还没到执行日期或正是执行日期，调度到本月
+                                next_run = datetime(current.year, current.month, day)
+                            
+                            # 设置具体的执行时间
+                            time_parts = task_info['time'].split(':')
+                            next_run = next_run.replace(
+                                hour=int(time_parts[0]),
+                                minute=int(time_parts[1]),
+                                second=0,
+                                microsecond=0
+                            )
+                            
+                            # 如果计算出的时间已经过去，调度到下个月
+                            if next_run < current:
+                                if next_run.month == 12:
+                                    next_run = next_run.replace(year=next_run.year + 1, month=1)
+                                else:
+                                    next_run = next_run.replace(month=next_run.month + 1)
+                            
+                            return next_run
                         
-                        # 修改job的执行函数，添加日期检查
-                        original_job_func = job.job_func
+                        next_run = calculate_next_run()
+                        
+                        # 计算时间差
+                        time_diff = (next_run - now).total_seconds()
+                        
+                        # 使用 schedule 的 every().seconds.do() 来调度
+                        job = self.scheduler.every(int(time_diff)).seconds
                         
                         def monthly_job_wrapper():
-                            # 检查今天是否是指定的月份日期
-                            today = datetime.now()
-                            if today.day == day:
-                                return original_job_func()
-                            return None
+                            try:
+                                # 执行任务
+                                self.run_task(task_info)
+                            finally:
+                                # 计算下次执行时间
+                                next_run = calculate_next_run()
+                                # 创建新的调度（使用新的时间）
+                                new_time_diff = (next_run - datetime.now()).total_seconds()
+                                new_job = self.scheduler.every(int(new_time_diff)).seconds
+                                new_job.do(monthly_job_wrapper)
+                                logging.info(f"月度任务 {task_info['taskName']} 重新调度到 {next_run}")
+                                # 取消当前的一次性任务
+                                return schedule.CancelJob
                         
-                        job.job_func = monthly_job_wrapper
+                        # 直接设置任务回调
+                        job.do(monthly_job_wrapper)
+                        
+                        logging.info(f"月度任务 {task_info['taskName']} 已调度到 {next_run}")
+                        return job
                     else:
                         logging.error(f"无效的月份日期: {day_of_month}")
                         return None
@@ -235,8 +280,11 @@ class TaskScheduler:
                 logging.error(f"无效的频率设置: {frequency}")
                 return None
             
-            # 设置任务回调
-            job.do(self.run_task, task_info)
+            # 只为非月度任务设置任务回调
+            if frequency != 'month':
+                job.do(self.run_task, task_info)
+            
+            return job
 
         except Exception as e:
             logging.error(f"安排任务失败: {e}")
