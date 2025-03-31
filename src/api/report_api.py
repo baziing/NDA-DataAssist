@@ -324,7 +324,8 @@ def create_task_api():
                 merged_sql = ' '.join(sql_parts)
                 
                 sql = "INSERT INTO autoreport_templates (task_id, db_name, output_sql, sql_order, transpose, format, pos, sheet_name, sheet_order) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                values = (str(task_id), row['db_name'], merged_sql, sql_order, row.get('transpose', False), row.get('format'), row.get('pos'), row.get('sheet_name'), row.get('sheet_order'))
+                transpose_value = row.get('transpose(Y/N)', 'N').upper() == 'Y'
+                values = (str(task_id), row['db_name'], merged_sql, sql_order, transpose_value, row.get('format'), row.get('pos'), row.get('sheet_name'), row.get('sheet_order'))
                 cursor.execute(sql, values)
                 sql_order += 1
                 

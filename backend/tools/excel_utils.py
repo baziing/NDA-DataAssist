@@ -62,8 +62,8 @@ def check_excel_file(file_path):
                     sql_dict['format'] = row['format']
                 if 'pos' in columns and pd.notna(row['pos']):
                     sql_dict['pos'] = row['pos']
-                if 'transpose' in columns and pd.notna(row['transpose']):
-                    sql_dict['transpose'] = row['transpose']
+                if 'transpose(y/n)' in columns and pd.notna(row['transpose(y/n)']):
+                    sql_dict['transpose(Y/N)'] = row['transpose(y/n)']
                 
                 sql_list.append(sql_dict)
             sheet_order += 1
