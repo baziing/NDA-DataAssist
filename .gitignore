@@ -29,3 +29,4 @@ yarn.lock
 backend/tasks.json
 *.sql
 backend/report_generator.py
+tmp/

@@ -25,6 +25,7 @@ from backend.utils import connect_db, execute_query
 import sqlparse
 import mysql.connector
 from backend.task_management import register_task_management_routes
+from backend.dify import register_dify_routes
 from backend.file_name_formatter import format_filename
 from backend import task_scheduler
 from backend.email_management import (
@@ -45,6 +46,9 @@ task_scheduler = TaskScheduler()
 
 # 注册任务管理相关的路由，传入task_scheduler实例
 register_task_management_routes(app, task_scheduler)
+
+# 注册Dify相关的路由
+register_dify_routes(app)
 
 # 添加错误处理中间件
 @app.errorhandler(Exception)
