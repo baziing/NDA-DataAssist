@@ -162,6 +162,22 @@ export const constantRoutes = [
         meta: { title: '格式说明' }
       }
     ]
+  },
+  {
+    path: '/aiService', // AI客服模块的路径
+    component: Layout,
+    redirect: '/aiService/overview', // 重定向到数据概览
+    name: 'AIService',
+    alwaysShow: true, // 确保总是显示根菜单
+    meta: { title: 'AI客服', icon: 'message' }, // AI客服模块的标题和图标
+    children: [
+      {
+        path: 'overview',
+        component: () => import('@/views/AIService/overview'),
+        name: 'Overview',
+        meta: { title: '数据概览' }
+      }
+    ]
   }
 ]
 
