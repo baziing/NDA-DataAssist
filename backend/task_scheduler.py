@@ -197,10 +197,46 @@ class TaskScheduler:
                 # 将数字转换为英文星期几名称
                 if day_of_week in weekday_mapping:
                     day_of_week_name = weekday_mapping[day_of_week]
-                    job = getattr(self.scheduler.every(), day_of_week_name).at(task_info['time'])
-                else:
-                    logging.error(f"无效的星期几值: {day_of_week}")
-                    return None
+                    # 先计算今天的目标时间
+                    target_time = datetime.strptime(task_info['time'], '%H:%M').time()
+                    target_datetime = datetime.combine(datetime.now().date(), target_time)
+                    
+                    # 如果是目标星期几，且目标时间还没到，就用今天的时间
+                    if datetime.now().weekday() == int(day_of_week) - 1 and target_datetime > datetime.now():
+                        next_run_at = target_datetime
+                    else:
+                        # 否则计算到下一个目标星期几的天数
+                        days_ahead = (int(day_of_week) - 1) - datetime.now().weekday()
+                        if days_ahead <= 0:  # 如果已经过了本周的目标日期
+                            days_ahead += 7
+                        next_run_at = datetime.combine((datetime.now() + timedelta(days=days_ahead)).date(), target_time)
+                    
+                    logging.info(f"周任务 {task_info['taskName']} 的下次执行时间: {next_run_at}")
+                    
+                    # 使用 schedule 的 every().seconds.do() 来调度
+                    time_diff = (next_run_at - datetime.now()).total_seconds()
+                    job = self.scheduler.every(int(time_diff)).seconds
+                    
+                    def weekly_job_wrapper():
+                        try:
+                            # 执行任务
+                            self.run_task(task_info)
+                        finally:
+                            # 计算下次执行时间
+                            next_run_at = calculate_next_run_at(task_info['frequency'], task_info['dayOfMonth'], task_info['dayOfWeek'], task_info['time'])
+                            # 创建新的调度（使用新的时间）
+                            new_time_diff = (next_run_at - datetime.now()).total_seconds()
+                            new_job = self.scheduler.every(int(new_time_diff)).seconds
+                            new_job.do(weekly_job_wrapper)
+                            logging.info(f"周任务 {task_info['taskName']} 重新调度到 {next_run_at}")
+                            # 取消当前的一次性任务
+                            return schedule.CancelJob
+                    
+                    # 直接设置任务回调
+                    job.do(weekly_job_wrapper)
+                    
+                    logging.info(f"周任务 {task_info['taskName']} 已调度到 {next_run_at}")
+                    return job
             elif frequency == 'month' and day_of_month:
                 # 月度任务处理逻辑
                 try:
@@ -337,7 +373,7 @@ class TaskScheduler:
                     'db_name': template['db_name'],
                     'output_sql': template['output_sql'],  # 保留原始格式，不替换换行符
                     'format': template.get('format', ''),
-                    'transpose': template.get('transpose', 'N'),
+                    'transpose(Y/N)': 'Y' if template.get('transpose') else 'N',  # 将布尔值转换为 Y/N
                     'pos': template.get('pos', ''),
                     'sheet_name': template.get('sheet_name', '汇总报表'),
                     'sheet_order': template.get('sheet_order', 0)
